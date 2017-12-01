@@ -134,7 +134,73 @@ def generate_player_id_names():
     return df.drop_duplicates()
 
 
+# Generate the general results of a game
+# Scores, home/away, opponent
+def generate_games_overview( inp_year, season_type ):
 
+    # Checks that inp_year and season_type valid
+    # Returns the query strings to select that year and season
+    year_str, season_str = __run_assertions( inp_year, season_type )
+    
+    query_str = (
+         " SELECT gsis_id, week, home_team, home_score, away_team, away_score  "
+        +" FROM game "
+        +year_str
+        +season_str
+        +"  AND game.finished    = TRUE "
+        +" GROUP BY game.gsis_id "
+        +" ORDER BY game.gsis_id "
+    )
+
+    engine = create_engine( __engine_path )
+
+    all_games_df = pd.read_sql_query(query_str,con=engine)
+
+    team_list = sorted( all_games_df['away_team'].unique() )
+    week_list = sorted( all_games_df[     'week'].unique() )
+
+    results_frame = pd.DataFrame()
+
+    # Might be able to group the general game stats in a single
+    #  command, but this shows explicitly what we are doing
+    #  not like we need high efficiency here
+    for week_num in week_list:
+
+        games_df = all_games_df.loc[ all_games_df['week']==week_num ]
+
+        new_frame = pd.DataFrame( { 'week'     :week_num,
+                                    'home_flag':0, 
+                                    'away_flag':0,
+                                    'score'    :0,
+                                    'opp_team' :'',
+                                    'opp_score':0,
+                                    'team'     :team_list } )
+
+        # Use merges to find who each team played, and where, and the scores
+        # Start by assuming our team was home...
+        new_frame    [         'opp_team' ] = pd.merge( new_frame, games_df, how='left', left_on='team', right_on='home_team' )['away_team' ]
+        new_frame    [         'opp_score'] = pd.merge( new_frame, games_df, how='left', left_on='team', right_on='home_team' )['away_score']
+        new_frame    [             'score'] = pd.merge( new_frame, games_df, how='left', left_on='team', right_on='home_team' )['home_score']
+
+
+        # Null values indicate away
+        null_ind = new_frame['opp_team'].isnull()
+
+        # Now find the away team stuff
+        new_frame.loc[null_ind,'opp_team' ] = pd.merge( new_frame, games_df, how='left', left_on='team', right_on='away_team' )['home_team' ]
+        new_frame.loc[null_ind,'opp_score'] = pd.merge( new_frame, games_df, how='left', left_on='team', right_on='away_team' )['home_score']
+        new_frame.loc[null_ind,    'score'] = pd.merge( new_frame, games_df, how='left', left_on='team', right_on='away_team' )['away_score']
+
+        # Flag as home or away
+        new_frame.loc[ null_ind,'away_flag'] = 1
+        new_frame.loc[~null_ind,'home_flag'] = 1
+
+        # Order so more friendly
+        new_frame = new_frame[['week','team','score','opp_team','opp_score','home_flag','away_flag']]
+
+        # Combine with previous frame
+        results_frame = pd.concat([results_frame, new_frame], ignore_index=True)
+    return results_frame
 
 # All the possibly useful statistics for teams, by weeks
 # Will generate some probably useless data, but the user
@@ -287,8 +353,11 @@ def generate_stats( position, inp_year, season_type='Regular' ):
             +__team_end_query_string
         )
 
-        df = pd.read_sql_query(query_str,con=engine)
-        return __gen_team_avgs( df )
+        # Player query stats
+        df     = pd.read_sql_query(query_str,con=engine)
+        # General results of the game
+        gen_df = generate_games_overview( inp_year, season_type )
+        return pd.merge( __gen_team_avgs( df ), gen_df,  how='left', left_on=['team','week'], right_on = ['team','week'])
 
     
     # Otherwise, add to the query string

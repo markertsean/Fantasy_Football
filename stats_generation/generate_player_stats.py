@@ -340,6 +340,9 @@ def generate_stats( position, inp_year, season_type='Regular' ):
     # Basically player id and week
     query_str = __ind_query_string_start
 
+    # General game results
+    gen_df = generate_games_overview( inp_year, season_type )
+
     
     # Team is seperate from the others, 
     #   just handle seperate case here
@@ -356,7 +359,6 @@ def generate_stats( position, inp_year, season_type='Regular' ):
         # Player query stats
         df     = pd.read_sql_query(query_str,con=engine)
         # General results of the game
-        gen_df = generate_games_overview( inp_year, season_type )
         return pd.merge( __gen_team_avgs( df ), gen_df,  how='left', left_on=['team','week'], right_on = ['team','week'])
 
     
@@ -398,4 +400,15 @@ def generate_stats( position, inp_year, season_type='Regular' ):
         +__ind_query_string_end
     )
     
-    return pd.read_sql_query(query_str,con=engine)
+    ret_df = pd.read_sql_query(query_str,con=engine)
+    
+    # So we can look up other teams stats later
+    ret_df = pd.merge( ret_df, gen_df[['team','week','opp_team','home_flag','away_flag']],  
+                      how='left', left_on=['team','week'], right_on = ['team','week'])
+    
+    # If defense, add a little extra so we can 
+    if ( position== 'D' ):
+        ret_df = pd.merge( ret_df, gen_df[['team','week','opp_score']],  
+                          how='left', left_on=['team','week'], right_on = ['team','week'])
+        
+    return ret_df

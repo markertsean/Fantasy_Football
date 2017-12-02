@@ -1,6 +1,6 @@
 # Start of query string, player id and game week
 __ind_query_string_start = (
-        " SELECT play_player.player_id as player_id, game.week "
+        " SELECT play_player.player_id as player_id, play_player.team, game.week "
 )
 
 # Portion of query string at the end
@@ -8,7 +8,7 @@ __ind_query_string_start = (
 # combines like data by player and week, thus computing for a game
 __ind_query_string_end = ( 
          " AND game.finished    = TRUE "
-        +" GROUP BY play_player.player_id, game.week "
+        +" GROUP BY play_player.player_id, play_player.team, game.week "
         +" ORDER BY play_player.player_id, game.week "
 )
 

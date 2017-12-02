@@ -64,7 +64,7 @@ __ind_query_string_qb_feat = (
      ",   SUM(play_player.passing_att) as pass_attempts "
     +",   SUM(play_player.passing_cmp) as pass_complete "
     +",   SUM(play_player.passing_incmp) as pass_incomplete "
-    +",   AVG(play_player.passing_cmp_air_yds) as pass_air_yds_avg "
+    +",   SUM(play_player.passing_cmp_air_yds) as pass_air_yds "
     +",   MAX(play_player.passing_cmp_air_yds) as pass_air_yds_max "
     +",   SUM(play_player.passing_sk) as sacks "
     +",   SUM(play_player.passing_sk_yds) as sack_yards "
@@ -85,7 +85,6 @@ __ind_query_string_wr_feat = (
     +",   SUM(play_player.receiving_yac_yds) as yards_after_compl "
 
     # 
-    +",   AVG(play_player.kickret_yds) as return_yds_avg "
     +",   SUM(play_player.kickret_yds) as return_yds "
     +",   SUM(play_player.kickret_tds) as return_tds "
     +",   SUM(play_player.kickret_touchback) as touchbacks "
@@ -117,11 +116,8 @@ __ind_query_string_rb_feat = (
     # Possible features
      ",   SUM(play_player.receiving_tar) as rec_target "
     +",   SUM(play_player.receiving_yac_yds) as yards_after_compl "
-    +",   AVG(play_player.receiving_yac_yds) as yards_after_compl_avg "
-    +",   AVG(play_player.receiving_yds) as rec_yds_avg "
 
     # 
-    +",   AVG(play_player.kickret_yds) as return_yds_avg "
     +",   SUM(play_player.kickret_yds) as return_yds "
     +",   SUM(play_player.kickret_tds) as return_tds "
     +",   SUM(play_player.kickret_touchback) as touchbacks "

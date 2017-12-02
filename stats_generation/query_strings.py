@@ -127,6 +127,37 @@ __ind_query_string_rb_feat = (
     +",   SUM(play_player.kickret_touchback) as touchbacks "
 )
 
+
+# D full select portion of query
+__d_full_select_query = (
+     " SELECT play_player.team as team, game.week "
+
+    # Scored on
+    +",   SUM(play_player.defense_frec_tds) as fumb_tds "
+    +",   SUM(play_player.defense_int_tds) as int_tds "
+    +",   SUM(play_player.defense_misc_tds) as misc_tds "
+    +",   SUM(play_player.defense_int) as int "
+    +",   SUM(play_player.defense_frec) as fumb_rec "
+    +",   SUM(play_player.defense_sk) as sacks "
+    +",   SUM(play_player.defense_safe) as safeties "
+    +",   SUM(play_player.defense_fgblk) as fg_blk "
+    +",   SUM(play_player.defense_puntblk) as punt_blk "
+    +",   SUM(play_player.defense_xpblk) as xp_blk "
+
+    # Features
+    +",   SUM(play_player.defense_ast) as assisted_tackles "
+    +",   SUM(play_player.defense_tkl_primary) as tackles "
+    +",   SUM(play_player.defense_ffum) as fumb_forced "
+    +",   SUM(play_player.defense_frec_yds) as fumb_rec_yds "
+    +",   SUM(play_player.defense_int_yds) as int_yds "
+    +",   SUM(play_player.defense_misc_yds) as misc_yds "
+    +",   SUM(play_player.defense_pass_def) as pass_def "
+    +",   SUM(play_player.defense_qbhit) as qb_hit "
+    +",   SUM(play_player.defense_sk_yds) as sack_yds "
+    +",   SUM(play_player.defense_tkl_loss) as tackle_loss "
+    +",   SUM(play_player.defense_tkl_loss_yds) as tkl_loss_yds "
+)
+
 __team_full_query_string = (
     # All team data that may be useful
      " SELECT play_player.team as team, game.week as week  "

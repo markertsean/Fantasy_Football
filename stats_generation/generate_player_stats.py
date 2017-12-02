@@ -60,7 +60,8 @@ __ind_query_string_rb_feat  = query_strings.__ind_query_string_rb_feat
 __team_full_query_string = query_strings.__team_full_query_string
 __team_end_query_string  = query_strings.__team_end_query_string
 
-
+# Defensive query select
+__d_full_select_query = query_strings.__d_full_select_query
 
 
 
@@ -298,6 +299,9 @@ def generate_te_stats( inp_year, season_type='Regular' ):
 def generate_rb_stats( inp_year, season_type='Regular' ):
     return generate_stats( 'RB', inp_year, season_type )
     
+    
+def generate_d_stats( inp_year, season_type='Regular' ):
+    return generate_stats( 'D', inp_year, season_type )
 
     
 # Combination of above functions
@@ -321,11 +325,12 @@ def generate_stats( position, inp_year, season_type='Regular' ):
     
     # Make sure we are querying the right positions
     assert ((position=='K' ) or 
+            (position=='D' ) or 
             (position=='QB') or 
             (position=='WR') or 
             (position=='TE') or 
             (position=='RB') or
-            (position=='Team') ), 'Position must be one of "K", "QB", "WR", "TE", "RB", or "Team" '
+            (position=='Team') ), 'Position must be one of "K", "D", "QB", "WR", "TE", "RB", or "Team" '
         
     # Checks that inp_year and season_type valid
     # Returns the query strings to select that year and season
@@ -340,6 +345,8 @@ def generate_stats( position, inp_year, season_type='Regular' ):
     # Basically player id and week
     query_str = __ind_query_string_start
 
+    position_str = "  AND player.position  = '%s' " % position
+    
     # General game results
     gen_df = generate_games_overview( inp_year, season_type )
 
@@ -364,6 +371,9 @@ def generate_stats( position, inp_year, season_type='Regular' ):
     
     # Otherwise, add to the query string
     # whatever is specific to that position
+    elif ( position == 'D'  ):
+        query_str    = __d_full_select_query    
+        position_str =' '
     elif ( position == 'K'  ):
         query_str = query_str + __ind_query_string_k
     elif ( position == 'QB' ):
@@ -396,7 +406,7 @@ def generate_stats( position, inp_year, season_type='Regular' ):
          __ind_query_string_join
         +year_str
         +season_str
-        +"  AND player.position  = '%s' " % position
+        +position_str
         +__ind_query_string_end
     )
     

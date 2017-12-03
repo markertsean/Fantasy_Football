@@ -181,6 +181,7 @@ __team_full_query_string = (
     +",   SUM(play_player.defense_tkl_loss)     as def_tkl_loss "
     +",   SUM(play_player.defense_tkl_loss_yds) as def_tkl_loss_yds "
 
+    +",   SUM(play_player.fumbles_tot)       as off_fumb_tot "
     +",   SUM(play_player.fumbles_forced)    as off_fumb_forced "
     +",   SUM(play_player.fumbles_notforced) as off_fumb_unforced "
     +",   SUM(play_player.fumbles_lost)      as off_fumb_lost "

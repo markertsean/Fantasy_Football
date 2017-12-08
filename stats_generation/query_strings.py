@@ -46,6 +46,8 @@ __ind_query_string_k = (
     +",   SUM(play_player.kicking_fgmissed) as fg_miss "
 
     # Maximum range + minimum missed
+    +",   SUM(play_player.kicking_fgm_yds) as fg_made_yds "
+    +",   SUM(play_player.kicking_fgmissed_yds) as fg_miss_yds "
     +",   MAX(play_player.kicking_fgm_yds) as fg_made_max "
     +",   MIN(NULLIF(play_player.kicking_fgmissed_yds,0)) as fg_miss_min "
 )

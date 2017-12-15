@@ -135,7 +135,7 @@ def aggregate_pre_reg_team_stats( end_year,
     stat_list = stat_list + ['rush_att','rush_yds','pass_att','pass_yds','pass_cmp','pass_sack']
 
     # Get info on kicks
-    stat_list = stat_list + ['kickoffs','punts','fg_miss']
+    stat_list = stat_list + ['kickoffs','punts','fg_miss','kickret_tds','punt_ret_tds']
 
     # How well off keeps the ball
     stat_list = stat_list + ['off_fumb_tot']
@@ -156,8 +156,8 @@ def aggregate_pre_reg_team_stats( end_year,
     #  or does whole D need to tackle one guy
     stat_list = stat_list + ['def_tkl','def_tkl_contributers']
 
-    # Defensive turnovers, just take 2
-    stat_list = stat_list + ['def_fumb_forced','def_int']
+    # Defensive turnovers, just take a few
+    stat_list = stat_list + ['def_fumb_rec','def_fumb_forced','def_int']
 
     # Pressure
     stat_list = stat_list + ['def_tkl_loss','def_sack','def_pass_def']

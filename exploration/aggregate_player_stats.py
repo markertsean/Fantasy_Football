@@ -104,6 +104,62 @@ def aggregate_pre_reg_team_stats( end_year,
 # User provides the frame and columns to sum over,
 #   as well as the number of weeks,
 # Returned frame is sorted by team and year,
+def calc_prev_player_stats( 
+                            inp      ,    # Dataframe containing preseason/regular season stuff 
+                            use_cols ,    # Column names to do sums for
+                            n_wk=4        # Number of weeks to perform calculation. Def 4 ( num of preseason games )
+                           ):
+     
+    assert ( ( 'player_id' in inp.columns ) & 
+             ( 'week' in inp.columns ) & 
+             ( 'year' in inp.columns ) & 
+             ( 'team' in inp.columns ) ), "calc_prev_player_stats input dataframe requires ['player_id','week','year','team'] columns"
+        
+    # Make sure the df is sorted
+    inp_df = inp.sort_values( ['player_id','year','week'] ).copy()
+    
+    # Generate new column names, use_cols + _prev_ndays
+    new_cols = [str(col) + '_prev_' + str(n_wk) for col in use_cols]
+
+    # Make sure we include week, for indexing purposes
+    if ( type( use_cols ) == np.ndarray ):
+        use_cols = use_cols.tolist()
+    
+    # Output frame,
+    #  just set up columns and indexes,
+    #  will return these columns
+    new_frame = pd.DataFrame( index=inp_df.index, columns=new_cols )
+
+    foo = ( inp_df.groupby(['player_id','year'], 
+                           as_index=False, 
+                           group_keys=False )
+                           [use_cols]
+                           .rolling( n_wk )
+                           .sum()
+                           .shift(1) )
+
+    foo.columns = new_cols
+
+    foo.index = inp_df.index
+
+    bar =(inp_df.sort_values( ['player_id','year','week'] )
+                        [['player_id','team','year','week']] )
+
+    bar.index = inp_df.index
+
+    foo['player_id'] = bar['player_id']
+    foo['team'] = bar['team']
+    foo['year'] = bar['year']
+    foo['week'] = bar['week']
+    
+    return foo.copy()
+
+
+
+# Calculates the sum of previous statistics
+# User provides the frame and columns to sum over,
+#   as well as the number of weeks,
+# Returned frame is sorted by team and year,
 def calc_prev_team_stats( 
                     inp      ,    # Dataframe containing preseason/regular season stuff 
                     use_cols ,    # Column names to do sums for

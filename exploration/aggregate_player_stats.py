@@ -7,6 +7,72 @@ query_strings = load_source('query_strings', '../stats_generation/query_strings.
 gps = load_source(  'generate_player_stats', '../stats_generation/generate_player_stats.py' )
 
 
+
+def generate_kicker_features( end_year, n_weeks=4, start_year=2009 ):
+    
+    all_kicker_data = pd.DataFrame()
+
+    # Get all the team preseason data
+    # Can id by team, week, year
+    for year in range( start_year, end_year ):
+        new_frame = gps.generate_stats( 'K', year, season_type='Preseason' )
+        new_frame['year'] = year
+        all_kicker_data = pd.concat( [all_kicker_data, new_frame], ignore_index=True )
+        
+    # Preseason weeks make -4 to 0
+    all_kicker_data['week'] = all_kicker_data['week']-4
+
+    # Get all the Kicker regular season data
+    # Can id by team, week, year
+    for year in range( start_year, end_year ):
+        new_frame = gps.generate_stats( 'K', year )
+        new_frame['year'] = year
+        all_kicker_data = pd.concat( [all_kicker_data, new_frame], ignore_index=True )
+
+    # Ignore some team stuff, can get from joining with team
+    all_kicker_data = all_kicker_data.drop( ['opp_team','home_flag','away_flag','xp_made','xp_miss'],axis=1 )
+
+    # Generate previous rolling sum
+    prev_kick = calc_prev_player_stats( all_kicker_data, ['fg_made','fg_miss','fg_made_yds','fg_miss_yds','fg_made_max'] )
+
+    # Combine present values with rolling sums
+    all_kicker_data = pd.merge( all_kicker_data, prev_kick, on=['player_id','team','year','week'] )
+
+    # Drop all the preseason stuff
+    all_kicker_data = all_kicker_data.loc[ all_kicker_data['week']>0 ]
+
+    # Note if the data includes preseason stuff
+    # If the first four games, flag as preseason data included
+    # This is tricky, as can have a bye-week
+    # Therefore, group things, find the first n_weeks, and flag those as 1
+    inds = all_kicker_data.groupby(['player_id','year'], as_index=False).nth( range(0, n_weeks) ).index.values
+
+    all_kicker_data    [       'few_reg_weeks'] = 0
+    all_kicker_data.loc[ inds, 'few_reg_weeks'] = 1
+    
+    k_team_comb = all_kicker_data
+
+    new_features = k_team_comb[['player_id','team','year','week','few_reg_weeks']].copy()
+
+    # Engineer some new features, mostly normalizing other features by kick/game
+    new_features['fg_made'           ] = k_team_comb['fg_made'].copy()
+    new_features['fg_made_prev_4_avg'] = k_team_comb['fg_made_prev_4'] / n_weeks
+    new_features['fg_acc_prev_4'     ] = k_team_comb['fg_made_prev_4'] / ( k_team_comb['fg_made_prev_4'] + k_team_comb['fg_miss_prev_4'] )
+
+    new_features['fg_made_yds_prev_4_avg'] = k_team_comb['fg_made_yds_prev_4'] / k_team_comb['fg_made_prev_4']
+    new_features['fg_miss_yds_prev_4_avg'] = k_team_comb['fg_miss_yds_prev_4'] / k_team_comb['fg_miss_prev_4']
+
+    max_group_k = k_team_comb.groupby(['player_id','year'],as_index=False).rolling(100,min_periods=1).max()
+    max_group_k['week'  ] = max_group_k['week'].astype(int)
+    max_group_k['fg_max'] = max_group_k['fg_made_max']
+    new_features['fg_max_season'] = pd.merge( k_team_comb, max_group_k, on=['player_id','year','week'] )['fg_max']
+    max_group_k = 0
+
+    new_features['fg_max_m_avg'  ] = new_features['fg_max_season'         ] - new_features['fg_made_yds_prev_4_avg']
+    new_features['fg_made_m_miss'] = new_features['fg_made_yds_prev_4_avg'] - new_features['fg_miss_yds_prev_4_avg']
+    
+    return new_features
+
 def generate_full_team_aggregate( end_year, n_weeks=4, start_year=2009 ):
 
     # Generate aggregate of team statistics from preseason and regular season

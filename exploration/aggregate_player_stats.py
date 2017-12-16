@@ -54,13 +54,15 @@ def generate_kicker_features( end_year, n_weeks=4, start_year=2009 ):
 
     new_features = k_team_comb[['player_id','team','year','week','few_reg_weeks']].copy()
 
+    wk_str = str(n_weeks)
     # Engineer some new features, mostly normalizing other features by kick/game
     new_features['fg_made'           ] = k_team_comb['fg_made'].copy()
-    new_features['fg_made_prev_4_avg'] = k_team_comb['fg_made_prev_4'] / n_weeks
-    new_features['fg_acc_prev_4'     ] = k_team_comb['fg_made_prev_4'] / ( k_team_comb['fg_made_prev_4'] + k_team_comb['fg_miss_prev_4'] )
+    new_features['fg_made_prev_'+wk_str+'_avg'] = k_team_comb['fg_made_prev_'+wk_str] / n_weeks
+    new_features['fg_acc_prev_'+wk_str        ] = k_team_comb['fg_made_prev_'+wk_str] / ( k_team_comb['fg_made_prev_'+wk_str] + 
+                                                                                          k_team_comb['fg_miss_prev_'+wk_str] )
 
-    new_features['fg_made_yds_prev_4_avg'] = k_team_comb['fg_made_yds_prev_4'] / k_team_comb['fg_made_prev_4']
-    new_features['fg_miss_yds_prev_4_avg'] = k_team_comb['fg_miss_yds_prev_4'] / k_team_comb['fg_miss_prev_4']
+    new_features['fg_made_yds_prev_'+wk_str+'_avg'] = k_team_comb['fg_made_yds_prev_'+wk_str] / k_team_comb['fg_made_prev_'+wk_str]
+    new_features['fg_miss_yds_prev_'+wk_str+'_avg'] = k_team_comb['fg_miss_yds_prev_'+wk_str] / k_team_comb['fg_miss_prev_'+wk_str]
 
     max_group_k = k_team_comb.groupby(['player_id','year'],as_index=False).rolling(100,min_periods=1).max()
     max_group_k['week'  ] = max_group_k['week'].astype(int)
@@ -68,12 +70,12 @@ def generate_kicker_features( end_year, n_weeks=4, start_year=2009 ):
     new_features['fg_max_season'] = pd.merge( k_team_comb, max_group_k, on=['player_id','year','week'] )['fg_max']
     max_group_k = 0
 
-    new_features['fg_max_m_avg'  ] = new_features['fg_max_season'         ] - new_features['fg_made_yds_prev_4_avg']
-    new_features['fg_made_m_miss'] = new_features['fg_made_yds_prev_4_avg'] - new_features['fg_miss_yds_prev_4_avg']
+    new_features['fg_max_m_avg'  ] = new_features['fg_max_season'                  ] - new_features['fg_made_yds_prev_'+wk_str+'_avg']
+    new_features['fg_made_m_miss'] = new_features['fg_made_yds_prev_'+wk_str+'_avg'] - new_features['fg_miss_yds_prev_'+wk_str+'_avg']
     
     return new_features
 
-def generate_full_team_aggregate( end_year, n_weeks=4, start_year=2009 ):
+def generate_full_team_aggregate( end_year, n_weeks=4, start_year=2009, drop_preseason=True ):
 
     # Generate aggregate of team statistics from preseason and regular season
     team_stats_df = aggregate_pre_reg_team_stats( end_year )
@@ -84,14 +86,18 @@ def generate_full_team_aggregate( end_year, n_weeks=4, start_year=2009 ):
     # Combine the present values with the recent averages
     team_stats_df = pd.merge( team_stats_df, prev_team, on=['team','year','week'] )
 
-    # Drop all the preseason stuff
-    team_stats_df = team_stats_df.loc[ team_stats_df['week']>0 ]
-
+    # Drop all the preseason stuff, unless the user wants to keep it
+    # If user doesn't drop, need to include a larger range for indicating preseason
+    pre_mod = 0
+    if (drop_preseason):
+        team_stats_df = team_stats_df.loc[ team_stats_df['week']>0 ]
+        pre_mod = 4
+        
     # Note if the data includes preseason stuff
     # If the first four games, flag as preseason data included
     # This is tricky, as can have a bye-week
     # Therefore, group things, find the first n_weeks, and flag those as 1
-    inds = team_stats_df.groupby(['team','year'], as_index=False).nth( range(0,n_weeks) ).index.values
+    inds = team_stats_df.groupby(['team','year'], as_index=False).nth( range(0,n_weeks+pre_mod) ).index.values
 
     team_stats_df    [       'includes_preseason'] = 0
     team_stats_df.loc[ inds, 'includes_preseason'] = 1
@@ -255,7 +261,7 @@ def calc_prev_team_stats(
                            as_index=False, 
                            group_keys=False )
                            [use_cols]
-                           .rolling( n_wk )
+                           .rolling( n_wk, min_periods=1 )
                            .sum()
                            .shift(1) )
 

@@ -179,9 +179,19 @@ def aggregate_pre_reg_team_stats( end_year,
 def calc_prev_player_stats( 
                             inp      ,    # Dataframe containing preseason/regular season stuff 
                             use_cols ,    # Column names to do sums for
-                            n_wk=4        # Number of weeks to perform calculation. Def 4 ( num of preseason games )
+                            n_wk=4   ,    # Number of weeks to perform calculation. Def 4 ( num of preseason games )
+                            avg_cols=None # Optional list of columns to perform averaging on
                            ):
-     
+    
+    return calc_prev_stats( 
+                    inp      ,    # Dataframe containing preseason/regular season stuff 
+                    use_cols ,    # Column names to do sums for
+                    'player_id',    # Whether team or player
+                    n_wk     ,    # Number of weeks to perform calculation. Def 4 ( num of preseason games )
+                    avg_cols      # Optional list of columns to perform averaging on
+                   )
+
+        
     assert ( ( 'player_id' in inp.columns ) & 
              ( 'week' in inp.columns ) & 
              ( 'year' in inp.columns ) & 
@@ -235,9 +245,18 @@ def calc_prev_player_stats(
 def calc_prev_team_stats( 
                     inp      ,    # Dataframe containing preseason/regular season stuff 
                     use_cols ,    # Column names to do sums for
-                    n_wk=4        # Number of weeks to perform calculation. Def 4 ( num of preseason games )
-                   ):
+                    n_wk=4   ,    # Number of weeks to perform calculation. Def 4 ( num of preseason games )
+                    avg_cols=None # Optional list of columns to perform averaging on
+                        ):
      
+    return calc_prev_stats( 
+                    inp      ,    # Dataframe containing preseason/regular season stuff 
+                    use_cols ,    # Column names to do sums for
+                    'team'   ,    # Whether team or player
+                    n_wk     ,    # Number of weeks to perform calculation. Def 4 ( num of preseason games )
+                    avg_cols      # Optional list of columns to perform averaging on
+                   )
+        
     assert ( ( 'week' in inp.columns ) & 
              ( 'year' in inp.columns ) & 
              ( 'team' in inp.columns ) ), "calc_prec_stats input dataframe requires ['week','year','team'] columns"
@@ -275,6 +294,96 @@ def calc_prev_team_stats(
     bar.index = inp_df.index
 
     foo['team'] = bar['team']
+    foo['year'] = bar['year']
+    foo['week'] = bar['week']
+    
+    return foo.copy()
+
+# Calculates the sum of previous statistics
+# User provides the frame and columns to sum over,
+#   as well as the number of weeks,
+# Can also provide averages
+def calc_prev_stats( 
+                    inp      ,    # Dataframe containing preseason/regular season stuff 
+                    use_cols ,    # Column names to do sums for
+                    t_p      ,    # Whether team or player
+                    n_wk=4   ,    # Number of weeks to perform calculation. Def 4 ( num of preseason games )
+                    avg_cols=None # Optional list of columns to perform averaging on
+                   ):
+    
+    assert ( 
+              (  (t_p == 'team'      ) & ( 'team'      in inp.columns ) ) |
+              (  (t_p == 'player_id' ) & ( 'player_id' in inp.columns ) )
+           ), 't_p must be "team" or "player_id", and must be present in input frame'
+    
+    assert ( ( 'week' in inp.columns ) & 
+             ( 'year' in inp.columns ) ), "calc_prev_stats input dataframe requires ['week','year'] columns"
+
+    
+    assert ( ( type(avg_cols) == None        ) |
+             ( isinstance(avg_cols,np.ndarray) ) |
+             ( isinstance(avg_cols,list      ) ) ), "avg_cols must be of type None, list, or np.ndarray "
+        
+    # Make sure the df is sorted
+    inp_df = inp.sort_values( [t_p,'year','week'] ).copy()
+    
+    # Generate new column names, use_cols + _prev_ndays
+    new_cols = [str(col) + '_prev_' + str(n_wk) for col in use_cols]
+
+    # Make sure we include week, for indexing purposes
+    if ( type( use_cols ) == np.ndarray ):
+        use_cols = use_cols.tolist()
+    
+    # Output frame,
+    #  just set up columns and indexes,
+    #  will return these columns
+    new_frame = pd.DataFrame( index=inp_df.index, columns=new_cols )
+
+    foo = ( inp_df.groupby([t_p,'year'], 
+                           as_index=False, 
+                           group_keys=False )
+                           [use_cols]
+                           .rolling( n_wk, min_periods=0 )
+                           .sum()
+                           .shift(1) )
+    
+    # If averaging, get the number of weeks summed,
+    #  and divide the sum by number of weeks summed
+    if ( type(avg_cols) != None ):
+        
+        # Number of items in a summation
+        n = ( inp_df.groupby([t_p,'year'], 
+                           as_index=False, 
+                           group_keys=False )
+                           [use_cols]
+                           .rolling( n_wk, min_periods=0 )
+                           .count()
+                           .shift(1)
+            )
+
+        # Keep track of new column list
+        avg_col_list = []
+        
+        for col in avg_cols:
+            avg_col_list.append( col+'_avg_'+str(n_wk) )
+            foo[ avg_col_list[-1] ] = foo[col] / n[col]
+
+        # Reset the column names using the new names & avgs
+        foo.columns = np.append( new_cols, avg_col_list )
+
+    else:
+        # Reset the column names to the new names
+        foo.columns = new_cols
+        
+    # Match the index so we can join back together
+    foo.index = inp_df.index
+
+    bar =(inp_df.sort_values( [t_p,'year'] )
+                        [[t_p,'year','week']] )
+
+    bar.index = inp_df.index
+
+    foo[t_p   ] = bar[t_p   ]
     foo['year'] = bar['year']
     foo['week'] = bar['week']
     

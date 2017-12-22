@@ -319,8 +319,7 @@ def calc_prev_stats(
     assert ( ( 'week' in inp.columns ) & 
              ( 'year' in inp.columns ) ), "calc_prev_stats input dataframe requires ['week','year'] columns"
 
-    
-    assert ( ( type(avg_cols) == None        ) |
+    assert ( ( avg_cols is None      ) |
              ( isinstance(avg_cols,np.ndarray) ) |
              ( isinstance(avg_cols,list      ) ) ), "avg_cols must be of type None, list, or np.ndarray "
         
@@ -349,7 +348,7 @@ def calc_prev_stats(
     
     # If averaging, get the number of weeks summed,
     #  and divide the sum by number of weeks summed
-    if ( type(avg_cols) != None ):
+    if ( avg_cols is not None ):
         
         # Number of items in a summation
         n = ( inp_df.groupby([t_p,'year'], 

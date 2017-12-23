@@ -44,7 +44,8 @@ def corr_plot( inp_df, exclude = None, focus = None, y_label_rotation=70, x_labe
     axes = pd.plotting.scatter_matrix( df )
     for i, j in zip(*plt.np.triu_indices_from(axes, k=1)):
         axes[i, j].cla()
-        axes[i, j].set_axis_bgcolor( cmap( 0.5 * corr_v[i,j] + 0.5) ) 
+#        axes[i, j].set_axis_bgcolor( cmap( 0.5 * corr_v[i,j] + 0.5) ) 
+        axes[i, j].set_facecolor( cmap( 0.5 * corr_v[i,j] + 0.5) ) 
         axes[i, j].annotate("%0.3f" %corr_v[i,j], (0.5, 0.5), xycoords='axes fraction', ha='center', va='center')
 
     # Optionally rotate the x ticks

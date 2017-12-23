@@ -75,6 +75,187 @@ def generate_kicker_features( end_year, n_weeks=4, start_year=2009 ):
     
     return new_features
 
+
+# Generates the defensive features
+# Mostly reliant of team stats, including
+#  how previous teams performed against
+#  this team in the past
+def generate_def_features( end_year, n_weeks=4, start_year=2009 ):
+
+
+    wk_str  = str(n_weeks)
+
+    team_stats_df = aps.generate_full_team_aggregate( end_year,
+                                                      n_weeks,
+                                                      start_year,
+                                                      drop_preseason=False )
+
+    keep_list = ['team','week','year','includes_preseason',
+                 'opp_team','opp_score','tds',
+                 'rush_yds','pass_yds','fg_made']
+
+    def_df = team_stats_df[ keep_list ].copy()
+
+    # All scored the same, hard to predict individually
+    #  but can likely predict def scores as a whole
+    def_df['all_def_tds'] = team_stats_df[[
+                                            'def_int_tds',
+                                            'def_frec_tds',
+                                            'def_misc_tds',
+                                            'kickret_tds',
+                                            'punt_ret_tds'
+                                          ]].sum(axis=1)
+
+    # Same thing with turnovers
+    def_df['all_def_turn'] = team_stats_df[[
+                                            'def_fumb_rec',
+                                            'def_int'
+                                           ]].sum(axis=1)
+
+    # Extremely rare
+    def_df['def_safety'] = team_stats_df['def_safety']
+
+    def_df['def_sack'  ] = team_stats_df['def_sack'  ]
+
+
+    def_agg = ['opp_score_prev_4','home_flag_prev_4','away_flag_prev_4','pass_sack_prev_4']
+    opp_agg = ['score_prev_4','tds_prev_4','rush_yds_prev_4','pass_yds_prev_4','fg_made_prev_4']
+
+    def_df[def_agg] = team_stats_df[def_agg].copy()
+    def_df['allowed_points_prev_4'] = def_df['opp_score_prev_4']
+    def_df = def_df.drop( 'opp_score_prev_4', axis=1 )
+
+    def_df[opp_agg] = team_stats_df[opp_agg].copy()
+    def_df.rename(columns=dict(zip( opp_agg, ['allowed_'+x for x in opp_agg] )), inplace=True)
+
+
+    # Aggregate some of the above
+
+    # Prob good indicators
+    def_df['all_def_tds_prev_4'] = team_stats_df[[
+                                            'def_int_tds_prev_4',
+                                            'def_frec_tds_prev_4',
+                                            'def_misc_tds_prev_4',
+                                            'kickret_tds_prev_4',
+                                            'punt_ret_tds_prev_4'
+                                          ]].sum(axis=1)
+
+    def_df['all_def_turn_prev_4'] = team_stats_df[[
+                                            'def_fumb_rec_prev_4',
+                                            'def_int_prev_4'
+                                           ]].sum(axis=1)
+
+    def_df['def_safety_prev_4'] = team_stats_df['def_safety_prev_4']
+    def_df['def_sack_prev_4'  ] = team_stats_df['def_sack_prev_4'  ]
+
+
+
+
+    # Current 'allowed_' are for the current team and one game, 
+    #  need to turn these into averages for past 4,
+    #  and then average over previous four opponents
+
+
+
+    other_team_list = ['allowed_tds_prev_4', 'allowed_rush_yds_prev_4', 'allowed_pass_yds_prev_4', 'allowed_fg_made_prev_4']
+
+    foo = def_df[ ['team','opp_team','week','year'] ].copy()
+
+    foo['opp_avg'+wk_str+'_tds'     ] = def_df['allowed_tds_prev_'     +wk_str]
+    foo['opp_avg'+wk_str+'_rush_yds'] = def_df['allowed_rush_yds_prev_'+wk_str] 
+    foo['opp_avg'+wk_str+'_pass_yds'] = def_df['allowed_pass_yds_prev_'+wk_str] 
+    foo['opp_avg'+wk_str+'_fg_made' ] = def_df['allowed_fg_made_prev_' +wk_str] 
+
+
+    # Foo will contain averages of an individual team's  
+    #  values over previous games, for different opponents
+    foo =(aps.calc_prev_team_stats( foo, 
+                                foo.columns.values[4:], 
+                                avg_cols=foo.columns.values[4:] )
+                              [
+                                [
+                                    'team',
+                                    'week',
+                                    'year',
+                                    'opp_avg'+wk_str+'_tds_avg_'     +wk_str,
+                                    'opp_avg'+wk_str+'_rush_yds_avg_'+wk_str,
+                                    'opp_avg'+wk_str+'_pass_yds_avg_'+wk_str,
+                                    'opp_avg'+wk_str+'_fg_made_avg_' +wk_str
+                                ]
+                              ]
+        )
+
+    # Rename foo columns
+    foo.columns =  [
+                        'team',
+                        'week',
+                        'year',
+                        'opp_avg'+wk_str+'_tds',
+                        'opp_avg'+wk_str+'_rush_yds',
+                        'opp_avg'+wk_str+'_pass_yds',
+                        'opp_avg'+wk_str+'_fg_made'
+                   ]
+
+
+    # Need to average foo over teams faced,
+    #  so consider teams faced, join team with opp team
+    #  then avg the opp team over past 4 games
+
+    # Do the joining on opposing team
+    bar =(pd.merge( def_df[['team','opp_team','week','year']], 
+                    foo, 
+                    left_on =['opp_team','week','year'], 
+                    right_on=[    'team','week','year'])
+                    .drop( 'team_y', axis=1 )
+                    .rename( index=str, columns={'team_x':'team'} )
+         )
+
+    # Perform aggregation, so sums opposing team allowed yardage
+    #  for a given team
+    bar = aps.calc_prev_team_stats( bar, bar.columns.values[4:] )
+
+
+
+    use_df = def_df[['team','week','year','includes_preseason']].copy()
+
+    # Targets
+    for col in ['all_def_tds', 
+                'all_def_turn', 
+                'def_safety', 
+                'def_sack']:
+        use_df[col] = def_df[col].copy()
+
+    # Opposing team's score
+    use_df['allowed_points'] = def_df['opp_score']
+
+
+
+    # Features
+    use_df['home_frac_prev_4'] = def_df['home_flag_prev_4'] / ( def_df['home_flag_prev_4'] + 0.0 + def_df['away_flag_prev_4'] )
+
+
+    # Aggregate features
+    for col in ['all_def_tds_prev_4',
+                'all_def_turn_prev_4',
+                'def_safety_prev_4',
+                'def_sack_prev_4',
+                'allowed_points_prev_4']:
+        use_df[col] = def_df[col].copy()
+
+    # Combine with what the defenses allowed in the previous games
+    #  against opposing teams, on average
+    use_df = pd.merge( 
+                        use_df, 
+                        bar,
+                        on=['team','year','week']
+                     )
+
+    # Only select regular season
+    use_df = use_df.loc[ use_df['week']>0 ]
+    
+    return use_df.copy()
+
+
 def generate_full_team_aggregate( end_year, n_weeks=4, start_year=2009, drop_preseason=True ):
 
     # Generate aggregate of team statistics from preseason and regular season
@@ -88,10 +269,10 @@ def generate_full_team_aggregate( end_year, n_weeks=4, start_year=2009, drop_pre
 
     # Drop all the preseason stuff, unless the user wants to keep it
     # If user doesn't drop, need to include a larger range for indicating preseason
-    pre_mod = 0
+    pre_mod = 4
     if (drop_preseason):
         team_stats_df = team_stats_df.loc[ team_stats_df['week']>0 ]
-        pre_mod = 4
+        pre_mod = 0
         
     # Note if the data includes preseason stuff
     # If the first four games, flag as preseason data included

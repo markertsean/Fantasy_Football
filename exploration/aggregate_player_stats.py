@@ -7,6 +7,144 @@ query_strings = load_source('query_strings', '../stats_generation/query_strings.
 gps = load_source(  'generate_player_stats', '../stats_generation/generate_player_stats.py' )
 
 
+# Generates the QB features
+# Mostly previous performance
+def generate_qb_features( end_year, n_weeks=4, start_year=2009 ):
+
+    
+    # Rename some parameters
+    min_year = start_year
+    max_year =   end_year
+    wk_str   = str(n_weeks)        
+
+    # For the QB SQL query
+    all_qb_data = pd.DataFrame()
+
+    # Get all the preseason data
+    # Can id by team, week, year
+    for year in range( min_year, max_year ):
+        new_frame = gps.generate_stats( 'QB', year, season_type='Preseason' )
+        new_frame['year'] = year
+        all_qb_data = pd.concat( [all_qb_data, new_frame], ignore_index=True )
+
+    # Rebrand preseason week
+    all_qb_data['week'] = all_qb_data['week']-4
+
+    # Get all the QB regular season data
+    # Can id by team, week, year
+    for year in range( min_year, max_year ):
+        new_frame = gps.generate_stats( 'QB', year )
+        new_frame['year'] = year
+        all_qb_data = pd.concat( [all_qb_data, new_frame], ignore_index=True )
+
+    # Ignore some team stuff, can get from joining with team
+    all_qb_data = all_qb_data.drop( ['opp_team','home_flag','away_flag'],axis=1 )
+
+    # Generate previous rolling sum
+    agg_stuff = [
+                    'pass_yds', 'pass_tds', 'pass_int', 
+                    'rush_yds', 'rush_tds', 'rush_att',
+                    'fumb_lost','fumb_rec_tds','fumb_rec','fumb_forced','fumb_nforced',
+                    'pass_attempts', 'pass_complete','pass_incomplete',
+                    'pass_air_yds', 'pass_air_yds_max', 
+                    'sacks', 'sack_yards'
+                ]
+    
+    # Rolling sums from previous games
+    prev_qb = calc_prev_player_stats( all_qb_data, agg_stuff )
+
+    # Combine present values with rolling sums
+    all_qb_data = pd.merge( all_qb_data, prev_qb, on=['player_id','year','week'] )
+
+    # Drop all the preseason stuff
+    all_qb_data = all_qb_data.loc[ all_qb_data['week']>0 ]
+
+    # Note if the data includes preseason stuff
+    # If the first four games, flag as preseason data included
+    # This is tricky, as can have a bye-week
+    # Therefore, group things, find the first n_weeks, and flag those as 1
+    inds = all_qb_data.groupby(['player_id','year'], as_index=False).nth( range(0, n_weeks) ).index.values
+
+    all_qb_data    [       'few_reg_weeks'] = 0
+    all_qb_data.loc[ inds, 'few_reg_weeks'] = 1
+    
+    
+    # Generate team stats
+    team_stats_df = generate_full_team_aggregate( end_year, drop_preseason=False )
+
+    # Stuff to grab from team df
+    team_stuff = [ 
+                   'tds_prev_', 
+                   'fg_made_prev_', 
+                   'fg_miss_prev_', 
+                   'home_flag_prev_', 
+                   'away_flag_prev_',
+                   'kickoffs_prev_', 
+                   'punts_prev_' 
+                 ]
+    team_stuff = [ item+wk_str for item in team_stuff ]
+
+    
+    temp_frame = pd.merge( 
+                           all_qb_data, 
+                           team_stats_df[['team','week','year']+team_stuff], 
+                           on=['team','week','year']
+                         )
+    
+    # For some reason att written as attempts
+    temp_frame['pass_att_prev_'+wk_str] = temp_frame['pass_attempts_prev_'+wk_str]
+
+    # Stuff to grab
+    reorg_stuff = [
+                    'pass_complete_prev_', 'pass_incomplete_prev_' , 'pass_int_prev_',
+                    'pass_air_yds_prev_' , 'pass_air_yds_max_prev_',
+
+                    'pass_yds_prev_', 'pass_tds_prev_', 'pass_att_prev_', 
+                    'rush_yds_prev_', 'rush_tds_prev_', 'rush_att_prev_',
+
+                    'fumb_lost_prev_'  , 'fumb_rec_prev_'    , 'fumb_rec_tds_prev_', 
+                    'fumb_forced_prev_', 'fumb_nforced_prev_',
+
+                    'sacks_prev_', 'sack_yards_prev_',
+
+                    'home_flag_prev_', 'away_flag_prev_',
+                    'tds_prev_', 'fg_made_prev_', 'fg_miss_prev_',
+                    'kickoffs_prev_', 'punts_prev_'
+                  ]
+    reorg_stuff = [ item+wk_str for item in reorg_stuff ]
+    
+    # Re-organize the frame
+    new_frame = temp_frame[[
+                            'player_id','team','week','year',
+                            'rush_yds', 'rush_tds',
+                            'pass_yds', 'pass_tds', 'pass_int',
+                            'fumb_lost',
+                            'few_reg_weeks',
+                           ]
+
+                            +reorg_stuff
+                          ]
+    
+    # Stuff to rename from the team frame
+    team_rn_dict = dict( zip( team_stuff, ['team_'+item for item in team_stuff] ) )
+
+    
+    # Opposition stuff to grab
+    # May have low/hi stats due to tough/weak teams
+    opp_agg = ['tds','fg_made','rush_yds','pass_yds','def_tkl_loss','def_sack','def_pass_def']
+    opp_df  = calc_opp_avg( team_stats_df, opp_agg )
+    
+    
+    # Rename some more rows
+    new_frame = new_frame.rename( index=str, columns=team_rn_dict )
+        
+    new_frame = pd.merge( new_frame, 
+                          opp_df   ,
+                          on=['team','week','year'],
+                          how='left'
+                        )
+    
+    return new_frame
 
 def generate_kicker_features( end_year, n_weeks=4, start_year=2009 ):
     
@@ -568,3 +706,67 @@ def calc_prev_stats(
     foo['week'] = bar['week']
     
     return foo.copy()
+
+
+# Generates stats for opposing teams
+# Takes average performance for opposing teams
+#   over previous n_wk games,
+#   serves as metric of how good that team is
+# Then performs aggregate summing of the values
+#   for previous n_wk for a given team
+def calc_opp_avg( inp_df, use_cols, n_wks=4 ):
+
+
+    # Make sure use_cols is actually in the array
+    assert np.isin( use_cols, inp_df.columns.values ).all(), \
+        'Elements '+str(use_cols)+' is not in input columns'
+    
+    
+    twyo = ['team','week','year','opp_team']
+    
+    wk_str = str(n_wks)
+    
+    # Copy the frame with only what we need
+    foo_df = inp_df[twyo+use_cols].copy()
+    foo_df.rename(columns=dict(zip( use_cols, ['opp_avg_'+x+'_prev_'+wk_str for x in use_cols] )), inplace=True)
+
+    new_cols = foo_df.columns.values[4:]
+
+    # Foo will contain averages of an individual team's  
+    #  values over previous games, for different opponents
+    foo_avg =(    calc_prev_team_stats( foo_df, 
+                                        new_cols, 
+                                        avg_cols=new_cols )
+                                       [
+                                           twyo[:-1]+
+                                           [ col+'_avg_'+wk_str for col in new_cols ]
+                                       ]
+             )
+
+
+    # Need to average foo over teams faced,
+    #  so consider teams faced, join team with opp team
+    #  then avg the opp team over past 4 games
+
+    # Do the joining on opposing team
+    bar =(
+            pd.merge( 
+                        foo_df[['team','opp_team','week','year']], 
+                        foo_avg, 
+                        left_on =['opp_team','week','year'], 
+                        right_on=[    'team','week','year'])
+                        .drop( 'team_y', axis=1 )
+                        .rename( index=str, columns={'team_x':'team'} 
+                    )
+         )
+
+    # Perform aggregation, so sums opposing team allowed yardage
+    #  for a given team
+    bar = calc_prev_team_stats( bar, bar.columns.values[4:] )
+
+    # Rename stuff because names are messy
+    r_dict = {}
+    for i in range(0,bar.columns.values[:-3].shape[0]):
+        r_dict[ bar.columns.values[i] ] = bar.columns.values[i][:-13]
+        
+    return bar.rename( index=str, columns=r_dict ).copy()

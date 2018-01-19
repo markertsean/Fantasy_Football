@@ -79,6 +79,7 @@ __ind_query_string_qb_feat = (
 __ind_query_string_wr_score = (
     # Scored on
      ",   SUM(play_player.receiving_rec) as receptions "
+    +",   SUM(play_player.receiving_tds) as rec_tds "
     +",   SUM(play_player.receiving_yds) as rec_yds "
 )    
 __ind_query_string_wr_feat = (
@@ -96,6 +97,7 @@ __ind_query_string_wr_feat = (
 __ind_query_string_te_score = (
     # Scored on
      ",   SUM(play_player.receiving_rec) as receptions "
+    +",   SUM(play_player.receiving_tds) as rec_tds "
     +",   SUM(play_player.receiving_yds) as rec_yds "
 )        
 __ind_query_string_te_feat = (        

@@ -17,7 +17,8 @@ def generate_player_features( end_year, position, n_weeks=4, start_year=2009 ):
         ( position== 'D') | 
         ( position== 'd') | 
         ( position== 'def') | 
-        ( position== 'Def')
+        ( position== 'Def') |
+        ( position== 'DEF') 
        ):
         return generate_def_features( end_year, n_weeks, start_year )
     

@@ -7,6 +7,321 @@ query_strings = load_source('query_strings', '../stats_generation/query_strings.
 gps = load_source(  'generate_player_stats', '../stats_generation/generate_player_stats.py' )
 
 
+        
+# Generates the features for input player type
+# Mostly previous performance
+def generate_player_features( end_year, position, n_weeks=4, start_year=2009 ):
+
+    # Def can be passed in different ways
+    if ( 
+        ( position== 'D') | 
+        ( position== 'd') | 
+        ( position== 'def') | 
+        ( position== 'Def')
+       ):
+        return generate_def_features( end_year, n_weeks, start_year )
+    
+    assert ( 
+            ( position == 'QB' ) |
+            ( position == 'WR' ) |
+            ( position == 'TE' ) |
+            ( position == 'RB' ) |
+            ( position ==  'K' ) 
+           ), "Position must be 'QB', 'RB', 'WR', 'TE', 'K', or 'DEF'"
+
+    # List of features, vary for each position
+    #  so just put in another function for clarity
+    agg_stuff, opp_agg, team_stuff, reorg_stuff, ret_feats_head = __return_feature_string_arrays(position)
+    
+    
+    # Rename some parameters
+    min_year = start_year
+    max_year =   end_year
+    wk_str   = str(n_weeks)
+
+    
+    # For the Player SQL query
+    all_player_data = pd.DataFrame()
+
+    
+    # Get all the preseason data
+    # Can id by team, week, year
+    for year in range( min_year, max_year ):
+        new_frame = gps.generate_stats( position, year, season_type='Preseason' )
+        new_frame['year'] = year
+        all_player_data = pd.concat( [all_player_data, new_frame], ignore_index=True )
+
+    # Rebrand preseason week
+    all_player_data['week'] = all_player_data['week']-4
+
+    # Get all the player regular season data
+    # Can id by team, week, year
+    for year in range( min_year, max_year ):
+        new_frame = gps.generate_stats( position, year )
+        new_frame['year'] = year
+        all_player_data = pd.concat( [all_player_data, new_frame], ignore_index=True )
+
+        
+        
+    # Ignore some team stuff, can get from joining with team
+    all_player_data = all_player_data.drop( ['opp_team','home_flag','away_flag'],axis=1 )
+    
+    
+    # Rolling sums from previous games
+    prev_player = calc_prev_player_stats( all_player_data, agg_stuff, n_weeks )
+    
+    
+    # Combine present values with rolling sums
+    all_player_data = pd.merge( all_player_data, prev_player, on=['player_id','year','week'] )
+
+    
+    # Drop all the preseason stuff
+    all_player_data = all_player_data.loc[ all_player_data['week']>0 ]
+
+    
+    # Note if the data includes preseason stuff
+    # If the first four games, flag as preseason data included
+    # This is tricky, as can have a bye-week
+    # Therefore, group things, find the first n_weeks, and flag those as 1
+    inds = all_player_data.groupby(['player_id','year'], as_index=False).nth( range(0, n_weeks) ).index.values
+
+    all_player_data    [       'few_reg_weeks'] = 0
+    all_player_data.loc[ inds, 'few_reg_weeks'] = 1
+    
+    
+    # Generate team stats
+    team_stats_df = generate_full_team_aggregate( end_year, n_weeks, start_year, drop_preseason=False )
+
+    
+    # Opposition team stuff to grab
+    # May have low/hi stats due to tough/weak teams
+    opp_df = calc_opp_avg( team_stats_df, opp_agg, n_weeks )
+
+    
+    # Stuff to grab from team df
+    team_stuff = [ item+wk_str for item in team_stuff ]
+
+    
+    
+    # Combine the player data with team data
+    temp_frame = pd.merge( 
+                           all_player_data, 
+                           team_stats_df[['team','week','year']+team_stuff], 
+                           on=['team','week','year'],
+                           suffixes=('','_team')
+                         )
+    
+    # For some reason att written as attempts
+    if ( 'pass_attempts_prev_'+wk_str in temp_frame.columns.values ):
+        temp_frame['pass_att_prev_'+wk_str] = temp_frame['pass_attempts_prev_'+wk_str]
+
+    
+    # Stuff to grab in the returned frame, organized a little
+    reorg_stuff = [ item+wk_str for item in reorg_stuff ]
+    
+    
+    # Re-organize the frame
+    new_frame = temp_frame[
+                            ret_feats_head +
+                            reorg_stuff
+                          ]
+    
+    # Stuff to rename from the team frame
+    team_rn_dict = dict( zip( team_stuff, ['team_'+item for item in team_stuff] ) )
+
+    
+    # Rename some more rows
+    new_frame = new_frame.rename( index=str, columns=team_rn_dict )
+        
+    # Combine with the opposition frame
+    new_frame = pd.merge( new_frame, 
+                          opp_df   ,
+                          on=['team','week','year'],
+                          how='left'
+                        )
+    
+    return new_frame
+
+
+
+
+# Generates the defensive features
+# Mostly reliant of team stats, including
+#  how previous teams performed against
+#  this team in the past
+def generate_def_features( end_year, n_weeks=4, start_year=2009 ):
+
+
+    wk_str  = str(n_weeks)
+
+    team_stats_df = generate_full_team_aggregate( end_year,
+                                                      n_weeks,
+                                                      start_year,
+                                                      drop_preseason=False )
+
+    keep_list = ['team','week','year','includes_preseason',
+                 'opp_team','opp_score','tds',
+                 'rush_yds','pass_yds','fg_made']
+
+    def_df = team_stats_df[ keep_list ].copy()
+
+    # All scored the same, hard to predict individually
+    #  but can likely predict def scores as a whole
+    def_df['all_def_tds'] = team_stats_df[[
+                                            'def_int_tds',
+                                            'def_frec_tds',
+                                            'def_misc_tds',
+                                            'kickret_tds',
+                                            'punt_ret_tds'
+                                          ]].sum(axis=1)
+
+    # Same thing with turnovers
+    def_df['all_def_turn'] = team_stats_df[[
+                                            'def_fumb_rec',
+                                            'def_int'
+                                           ]].sum(axis=1)
+
+    # Extremely rare
+    def_df['def_safety'] = team_stats_df['def_safety']
+
+    # Can take this
+    def_df['def_sack'  ] = team_stats_df['def_sack'  ]
+
+
+    def_agg = ['opp_score_prev_4','home_flag_prev_4','away_flag_prev_4','pass_sack_prev_4']
+    opp_agg = ['score_prev_4','tds_prev_4','rush_yds_prev_4','pass_yds_prev_4','fg_made_prev_4']
+
+    def_df[def_agg] = team_stats_df[def_agg].copy()
+    def_df['allowed_points_prev_4'] = def_df['opp_score_prev_4']
+    def_df = def_df.drop( 'opp_score_prev_4', axis=1 )
+
+    def_df[opp_agg] = team_stats_df[opp_agg].copy()
+    def_df.rename(columns=dict(zip( opp_agg, ['allowed_'+x for x in opp_agg] )), inplace=True)
+
+
+    # Aggregate some of the above
+
+    # Prob good indicators
+    def_df['all_def_tds_prev_4'] = team_stats_df[[
+                                            'def_int_tds_prev_4',
+                                            'def_frec_tds_prev_4',
+                                            'def_misc_tds_prev_4',
+                                            'kickret_tds_prev_4',
+                                            'punt_ret_tds_prev_4'
+                                          ]].sum(axis=1)
+
+    def_df['all_def_turn_prev_4'] = team_stats_df[[
+                                            'def_fumb_rec_prev_4',
+                                            'def_int_prev_4'
+                                           ]].sum(axis=1)
+
+    def_df['def_safety_prev_4'] = team_stats_df['def_safety_prev_4']
+    def_df['def_sack_prev_4'  ] = team_stats_df['def_sack_prev_4'  ]
+
+
+
+
+    # Current 'allowed_' are for the current team and one game, 
+    #  need to turn these into averages for past 4,
+    #  and then average over previous four opponents
+    other_team_list = ['allowed_tds_prev_4', 'allowed_rush_yds_prev_4', 'allowed_pass_yds_prev_4', 'allowed_fg_made_prev_4']
+
+    foo = def_df[ ['team','opp_team','week','year'] ].copy()
+
+    foo['opp_avg'+wk_str+'_tds'     ] = def_df['allowed_tds_prev_'     +wk_str]
+    foo['opp_avg'+wk_str+'_rush_yds'] = def_df['allowed_rush_yds_prev_'+wk_str] 
+    foo['opp_avg'+wk_str+'_pass_yds'] = def_df['allowed_pass_yds_prev_'+wk_str] 
+    foo['opp_avg'+wk_str+'_fg_made' ] = def_df['allowed_fg_made_prev_' +wk_str] 
+
+
+    # Foo will contain averages of an individual team's  
+    #  values over previous games, for different opponents
+    foo =(calc_prev_team_stats( foo, 
+                                foo.columns.values[4:], 
+                                avg_cols=foo.columns.values[4:] )
+                              [
+                                [
+                                    'team',
+                                    'week',
+                                    'year',
+                                    'opp_avg'+wk_str+'_tds_avg_'     +wk_str,
+                                    'opp_avg'+wk_str+'_rush_yds_avg_'+wk_str,
+                                    'opp_avg'+wk_str+'_pass_yds_avg_'+wk_str,
+                                    'opp_avg'+wk_str+'_fg_made_avg_' +wk_str
+                                ]
+                              ]
+        )
+
+    # Rename foo columns
+    foo.columns =  [
+                        'team',
+                        'week',
+                        'year',
+                        'opp_avg'+wk_str+'_tds',
+                        'opp_avg'+wk_str+'_rush_yds',
+                        'opp_avg'+wk_str+'_pass_yds',
+                        'opp_avg'+wk_str+'_fg_made'
+                   ]
+
+
+    # Need to average foo over teams faced,
+    #  so consider teams faced, join team with opp team
+    #  then avg the opp team over past 4 games
+
+    # Do the joining on opposing team
+    bar =(pd.merge( def_df[['team','opp_team','week','year']], 
+                    foo, 
+                    left_on =['opp_team','week','year'], 
+                    right_on=[    'team','week','year'])
+                    .drop( 'team_y', axis=1 )
+                    .rename( index=str, columns={'team_x':'team'} )
+         )
+
+    # Perform aggregation, so sums opposing team allowed yardage
+    #  for a given team
+    bar = calc_prev_team_stats( bar, bar.columns.values[4:] )
+
+
+
+    use_df = def_df[['team','week','year','includes_preseason']].copy()
+
+    # Targets
+    for col in ['all_def_tds', 
+                'all_def_turn', 
+                'def_safety', 
+                'def_sack']:
+        use_df[col] = def_df[col].copy()
+
+    # Opposing team's score
+    use_df['allowed_points'] = def_df['opp_score']
+
+
+
+    # Features
+    use_df['home_frac_prev_4'] = def_df['home_flag_prev_4'] / ( def_df['home_flag_prev_4'] + 0.0 + def_df['away_flag_prev_4'] )
+
+
+    # Aggregate features
+    for col in ['all_def_tds_prev_4',
+                'all_def_turn_prev_4',
+                'def_safety_prev_4',
+                'def_sack_prev_4',
+                'allowed_points_prev_4']:
+        use_df[col] = def_df[col].copy()
+
+    # Combine with what the defenses allowed in the previous games
+    #  against opposing teams, on average
+    use_df = pd.merge( 
+                        use_df, 
+                        bar,
+                        on=['team','year','week']
+                     )
+
+    # Only select regular season
+    use_df = use_df.loc[ use_df['week']>0 ]
+    
+    return use_df.copy()
+
 
 def generate_kicker_features( end_year, n_weeks=4, start_year=2009 ):
     
@@ -85,7 +400,7 @@ def generate_def_features( end_year, n_weeks=4, start_year=2009 ):
 
     wk_str  = str(n_weeks)
 
-    team_stats_df = aps.generate_full_team_aggregate( end_year,
+    team_stats_df = generate_full_team_aggregate( end_year,
                                                       n_weeks,
                                                       start_year,
                                                       drop_preseason=False )
@@ -169,7 +484,7 @@ def generate_def_features( end_year, n_weeks=4, start_year=2009 ):
 
     # Foo will contain averages of an individual team's  
     #  values over previous games, for different opponents
-    foo =(aps.calc_prev_team_stats( foo, 
+    foo =(calc_prev_team_stats( foo, 
                                 foo.columns.values[4:], 
                                 avg_cols=foo.columns.values[4:] )
                               [
@@ -212,7 +527,7 @@ def generate_def_features( end_year, n_weeks=4, start_year=2009 ):
 
     # Perform aggregation, so sums opposing team allowed yardage
     #  for a given team
-    bar = aps.calc_prev_team_stats( bar, bar.columns.values[4:] )
+    bar = calc_prev_team_stats( bar, bar.columns.values[4:] )
 
 
 
@@ -632,3 +947,92 @@ def calc_opp_avg( inp_df, use_cols, n_wks=4 ):
         r_dict[ bar.columns.values[i] ] = bar.columns.values[i][:-13]
         
     return bar.rename( index=str, columns=r_dict ).copy()
+
+
+
+
+
+
+# Put all the arrays of what to grab in one place
+def __return_feature_string_arrays( position ):
+    
+    agg_stuff   = []
+    opp_agg     = []
+    team_stuff  = []
+    reorg_stuff = []
+    ret_feats   = []
+    
+    # This is pretty much the same for all positions
+    opp_agg = ['tds','fg_made','rush_yds','pass_yds','def_tkl_loss','def_sack','def_pass_def']
+
+    # Diff for qb
+    team_stuff = ['tds_prev_','fg_made_prev_','fg_miss_prev_','home_flag_prev_','away_flag_prev_','kickoffs_prev_',
+              'punts_prev_','rush_att_prev_','pass_att_prev_','rush_yds_prev_','pass_yds_prev_',]
+
+    ret_feats_head = ['player_id','team','week','year','rush_yds', 'rush_tds',
+                      'rec_yds', 'rec_tds', 'receptions','fumb_lost','few_reg_weeks',]
+                           
+    if ( position=='QB' ):
+    
+        agg_stuff = ['pass_yds', 'pass_tds', 'pass_int', 'rush_yds', 'rush_tds', 'rush_att','fumb_lost','fumb_rec_tds','fumb_rec',
+                     'fumb_forced','fumb_nforced','pass_attempts', 'pass_complete','pass_incomplete', 'pass_air_yds', 'pass_air_yds_max', 
+                     'sacks', 'sack_yards']
+
+        reorg_stuff = [
+                'pass_complete_prev_', 'pass_incomplete_prev_' , 'pass_int_prev_', 'pass_air_yds_prev_' , 'pass_air_yds_max_prev_',
+                'pass_yds_prev_', 'pass_tds_prev_', 'pass_att_prev_', 'rush_yds_prev_', 'rush_tds_prev_', 'rush_att_prev_',
+                'fumb_lost_prev_'  , 'fumb_rec_prev_'    , 'fumb_rec_tds_prev_', 'fumb_forced_prev_', 'fumb_nforced_prev_',
+                'sacks_prev_', 'sack_yards_prev_', 'home_flag_prev_', 'away_flag_prev_',
+                'tds_prev_', 'fg_made_prev_', 'fg_miss_prev_','kickoffs_prev_', 'punts_prev_'
+              ]
+
+        team_stuff = ['tds_prev_','fg_made_prev_','fg_miss_prev_', 
+               'home_flag_prev_','away_flag_prev_','kickoffs_prev_','punts_prev_']
+
+        ret_feats_head = ['player_id','team','week','year','rush_yds','rush_tds',
+                  'pass_yds','pass_tds','pass_int','fumb_lost','few_reg_weeks',]
+
+    elif ( position=='RB' ):
+        agg_stuff = ['receptions','rec_target','rec_yds','rec_tds','rush_att','rush_yds','rush_tds','fumb_lost','fumb_rec',
+                     'fumb_rec_tds','fumb_forced','fumb_nforced','yards_after_compl','return_yds','return_tds','touchbacks']
+
+        reorg_stuff = ['receptions_prev_', 'rec_target_prev_', 'rec_yds_prev_', 'rec_tds_prev_', 'yards_after_compl_prev_',
+                       'rush_att_prev_', 'rush_yds_prev_', 'rush_tds_prev_','return_yds_prev_', 'return_tds_prev_', 'touchbacks_prev_',
+                       'fumb_lost_prev_', 'fumb_rec_prev_', 'fumb_rec_tds_prev_', 'fumb_forced_prev_', 'fumb_nforced_prev_',]
+        
+    elif ( position=='TE' ):
+        agg_stuff = ['receptions','rec_target','rec_yds','rec_tds','fumb_lost','fumb_rec',
+                     'fumb_rec_tds','fumb_forced','fumb_nforced','yards_after_compl']
+
+        reorg_stuff = ['receptions_prev_', 'rec_target_prev_', 'rec_yds_prev_', 'rec_tds_prev_', 'yards_after_compl_prev_',
+                       'fumb_lost_prev_', 'fumb_rec_prev_', 'fumb_rec_tds_prev_', 'fumb_forced_prev_', 'fumb_nforced_prev_', ]
+
+        ret_feats_head = ['player_id','team','week','year','receptions', 'rec_yds', 'rec_tds', 
+                          'fumb_lost','fumb_rec_tds','few_reg_weeks',]
+
+    elif ( position=='WR' ):
+        
+
+        agg_stuff = ['receptions','rec_target','rec_yds','rec_tds','fumb_lost','fumb_rec',
+                     'fumb_rec_tds','fumb_forced','fumb_nforced','yards_after_compl','return_yds','return_tds','touchbacks']
+
+        reorg_stuff = ['receptions_prev_', 'rec_target_prev_', 'rec_yds_prev_', 'rec_tds_prev_', 'yards_after_compl_prev_',
+                       'return_yds_prev_', 'return_tds_prev_', 'touchbacks_prev_',
+                       'fumb_lost_prev_', 'fumb_rec_prev_', 'fumb_rec_tds_prev_', 'fumb_forced_prev_', 'fumb_nforced_prev_',]
+
+        ret_feats_head = ['player_id','team','week','year','receptions', 'rec_yds', 'rec_tds', 
+                          'fumb_lost','fumb_rec_tds','few_reg_weeks',]
+
+                       
+    elif ( position=='K' ):
+        agg_stuff = ['fg_made', 'fg_made_max','fg_made_yds', 'fg_miss', 'fg_miss_yds']
+        
+        reorg_stuff = ['fg_made_prev_','fg_miss_prev_', 'fg_made_yds_prev_', 'fg_miss_yds_prev_','fg_made_max_prev_',]
+        
+        ret_feats_head = ['player_id','team','week','year','few_reg_weeks','fg_made']
+
+    else:
+        print 'aggregate_player_stats.__return_feature_string_arrays recieved unknown arg for position: ',
+        print position
+        
+    return agg_stuff, opp_agg, team_stuff, reorg_stuff, ret_feats_head

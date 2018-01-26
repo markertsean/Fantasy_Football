@@ -47,7 +47,7 @@ def generate_player_features( end_year, position, n_weeks=4, start_year=2009 ):
     
     # Get all the preseason data
     # Can id by team, week, year
-    for year in range( min_year, max_year ):
+    for year in range( min_year, max_year+1 ):
         new_frame = gps.generate_stats( position, year, season_type='Preseason' )
         new_frame['year'] = year
         all_player_data = pd.concat( [all_player_data, new_frame], ignore_index=True )
@@ -57,7 +57,7 @@ def generate_player_features( end_year, position, n_weeks=4, start_year=2009 ):
 
     # Get all the player regular season data
     # Can id by team, week, year
-    for year in range( min_year, max_year ):
+    for year in range( min_year, max_year+1 ):
         new_frame = gps.generate_stats( position, year )
         new_frame['year'] = year
         all_player_data = pd.concat( [all_player_data, new_frame], ignore_index=True )
@@ -330,7 +330,7 @@ def generate_kicker_features( end_year, n_weeks=4, start_year=2009 ):
 
     # Get all the team preseason data
     # Can id by team, week, year
-    for year in range( start_year, end_year ):
+    for year in range( start_year, end_year+1 ):
         new_frame = gps.generate_stats( 'K', year, season_type='Preseason' )
         new_frame['year'] = year
         all_kicker_data = pd.concat( [all_kicker_data, new_frame], ignore_index=True )
@@ -340,7 +340,7 @@ def generate_kicker_features( end_year, n_weeks=4, start_year=2009 ):
 
     # Get all the Kicker regular season data
     # Can id by team, week, year
-    for year in range( start_year, end_year ):
+    for year in range( start_year, end_year+1 ):
         new_frame = gps.generate_stats( 'K', year )
         new_frame['year'] = year
         all_kicker_data = pd.concat( [all_kicker_data, new_frame], ignore_index=True )
@@ -609,7 +609,7 @@ def aggregate_pre_reg_team_stats( end_year,
     reg_team_data = pd.DataFrame()
     # Get all the team data
     # Can id by team, week, year
-    for year in range( start_year, end_year ):
+    for year in range( start_year, end_year+1 ):
         new_frame = gps.generate_stats( 'Team', year )
         new_frame['year'] = year
         reg_team_data = pd.concat( [reg_team_data, new_frame], ignore_index=True )
@@ -618,7 +618,7 @@ def aggregate_pre_reg_team_stats( end_year,
     pre_team_data = pd.DataFrame()
     # Get all the team data
     # Can id by team, week, year
-    for year in range( start_year, end_year ):
+    for year in range( start_year, end_year+1 ):
         new_frame = gps.generate_stats( 'Team', year, 'Preseason' )
         new_frame['year'] = year
         pre_team_data = pd.concat( [pre_team_data, new_frame], ignore_index=True )

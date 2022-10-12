@@ -266,6 +266,7 @@ def run_nfl_import( input_start_year, input_end_year ):
         [
             'season', 'week','posteam','defteam',
             'play_id', 'game_id', 'old_game_id',
+            'interception', 'fumble', 'fumble_forced', 'fumble_not_forced',
             'passer_id', 'rusher_id', 'receiver_id',
             'passer_player_id','receiver_player_id',
             'rusher_player_id','lateral_rusher_player_id',
@@ -274,7 +275,7 @@ def run_nfl_import( input_start_year, input_end_year ):
             'kickoff_returner_player_id','lateral_kickoff_returner_player_id',
             'own_kickoff_recovery_player_id',
             'forced_fumble_player_1_team','forced_fumble_player_1_player_id',
-            'forced_fumble_player_1_team','forced_fumble_player_2_player_id',
+            'forced_fumble_player_2_team','forced_fumble_player_2_player_id',
             'fumbled_1_team', 'fumbled_1_player_id',
             'fumbled_2_team', 'fumbled_2_player_id',
             'fumble_recovery_1_team', 'fumble_recovery_1_player_id',

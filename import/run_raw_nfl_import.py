@@ -133,7 +133,7 @@ def run_nfl_import( input_start_year, input_end_year ):
         'tackle_for_loss_1_player_id','tackle_for_loss_2_player_id',
         'qb_hit_1_player_id','qb_hit_2_player_id',
         'forced_fumble_player_1_team','forced_fumble_player_1_player_id',
-        'forced_fumble_player_1_team','forced_fumble_player_2_player_id',
+        'forced_fumble_player_2_team','forced_fumble_player_2_player_id',
         'solo_tackle_1_player_id','solo_tackle_2_player_id',
         'assist_tackle_1_player_id','assist_tackle_2_player_id',
         'assist_tackle_3_player_id','assist_tackle_4_player_id',

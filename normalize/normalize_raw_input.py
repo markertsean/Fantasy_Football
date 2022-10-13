@@ -75,6 +75,22 @@ def load_process_kick_data(raw_input_path,input_year_list):
         'kick_distance_50'
     ] = 1
 
+    kicking_df['kick_distance_0_39_success' ] = 0
+    kicking_df['kick_distance_40_49_success'] = 0
+    kicking_df['kick_distance_50_success'   ] = 0
+
+    kicking_df['kick_distance_0_39_success' ] = kicking_df['field_goal_success'] * kicking_df['kick_distance_0_39' ]
+    kicking_df['kick_distance_40_49_success'] = kicking_df['field_goal_success'] * kicking_df['kick_distance_40_49']
+    kicking_df['kick_distance_50_success'   ] = kicking_df['field_goal_success'] * kicking_df['kick_distance_50'   ]
+
+    kicking_df['kick_distance_0_39_fail' ] = 0
+    kicking_df['kick_distance_40_49_fail'] = 0
+    kicking_df['kick_distance_50_fail'   ] = 0
+
+    kicking_df['kick_distance_0_39_fail' ] = (1-kicking_df['field_goal_success']) * kicking_df['kick_distance_0_39' ]
+    kicking_df['kick_distance_40_49_fail'] = (1-kicking_df['field_goal_success']) * kicking_df['kick_distance_40_49']
+    kicking_df['kick_distance_50_fail'   ] = (1-kicking_df['field_goal_success']) * kicking_df['kick_distance_50'   ]
+
     return kicking_df
 
 
@@ -245,7 +261,8 @@ def team_weekly_rollup( data_dict, key_fields ):
         [
             'extra_point_attempt', 'extra_point_success',
             'field_goal_attempt', 'field_goal_success',
-            'kick_distance_0_39', 'kick_distance_40_49', 'kick_distance_50'
+            'kick_distance_0_39_success', 'kick_distance_40_49_success', 'kick_distance_50_success',
+            'kick_distance_0_39_fail', 'kick_distance_40_49_fail', 'kick_distance_50_fail'
         ]
     )
 

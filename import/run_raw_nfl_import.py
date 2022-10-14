@@ -219,6 +219,7 @@ def run_nfl_import( input_start_year, input_end_year ):
             'play_id', 'game_id', 'old_game_id',
             'passing_yards', 'receiving_yards', 'lateral_receiving_yards',
             'rushing_yards', 'lateral_rushing_yards','return_yards',
+            'rush_attempt', 'pass_attempt', 'complete_pass',
 
             'passer_player_id','receiver_player_id','lateral_receiver_player_id',
             'rusher_player_id','lateral_rusher_player_id',

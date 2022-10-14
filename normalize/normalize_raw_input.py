@@ -273,7 +273,8 @@ def team_weekly_rollup( data_dict, key_fields ):
         key_fields,
         [
             'rushing_yards', 'passing_yards', 'receiving_yards', 'return_yards',
-            'passing_yards_40', 'rushing_recieving_yards_40'
+            'passing_yards_40', 'rushing_recieving_yards_40',
+            'rush_attempt', 'pass_attempt', 'complete_pass',
         ]
     )
 

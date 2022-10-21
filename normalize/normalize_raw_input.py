@@ -316,29 +316,34 @@ def team_weekly_rollup( data_dict, key_fields ):
 
     fumb1_df = turn_df[key_fields+[
         'fumble','fumble_forced','fumble_not_forced',
-        'fumbled_1_team',
+        'fumbled_1_team', 'fumble_recovery_1_team',
     ]].copy()
     fumb1_df['team'] = fumb1_df['fumbled_1_team']
+    fumb1_df['recovery'] = 0
+    fumb1_df.loc[fumb1_df['team']==fumb1_df['fumble_recovery_1_team'],'recovery'] = 1
 
     fumb2_df = turn_df.loc[turn_df['second_fumble']==1,key_fields+[
-        'fumbled_2_team',
+        'fumbled_2_team', 'fumble_recovery_2_team',
     ]].copy()
     fumb2_df['team'] = fumb2_df['fumbled_2_team']
     fumb2_df['fumble'] = 1
     fumb2_df['fumble_forced'] = 0
     fumb2_df['fumble_not_forced'] = 1
+    fumb2_df['recovery'] = 0
+    fumb2_df.loc[fumb2_df['team']==fumb2_df['fumble_recovery_2_team'],'recovery'] = 1
 
     fumb_df = pd.concat(
         [
-            fumb1_df[key_fields+['fumble','fumble_forced','fumble_not_forced']],
-            fumb2_df[key_fields+['fumble','fumble_forced','fumble_not_forced']],
+            fumb1_df[key_fields+['fumble','fumble_forced','fumble_not_forced','recovery']],
+            fumb2_df[key_fields+['fumble','fumble_forced','fumble_not_forced','recovery']],
         ],ignore_index=True
     ).reset_index()
+
     fumb_df_rollup = rollup_df(
         fumb_df,
         key_fields,
         [
-            'fumble','fumble_forced','fumble_not_forced',
+            'fumble','fumble_forced','fumble_not_forced','recovery'
         ]
     )
 

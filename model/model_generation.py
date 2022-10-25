@@ -390,6 +390,12 @@ def generate_weekly_team_features_values( inp_df, key_fields, n_rolling ):
         'opposing_fields':opp_fields,
     }
 
+def filter_df_year(inp_df,start_year,end_year):
+    return inp_df.loc[
+        (inp_df['season']>=start_year) &
+        (inp_df['season']<=  end_year)
+    ]
+
 #TODO: implement
 def load_scale_model():
     pass
@@ -600,11 +606,13 @@ def main():
 
     output_dfs = generate_weekly_team_features_values( norm_weekly_df, key_fields, input_arguments['n_rolling'] )
     
-    values_df           = output_dfs['value_df']
-    team_rolling_df     = output_dfs['team_df']
-    opposing_rolling_df = output_dfs['opposing_df']
     team_fields         = output_dfs['team_fields']
     opposing_fields     = output_dfs['opposing_fields']
+
+    values_df           = filter_df_year( output_dfs['value_df']   , input_arguments['process_start_year'], input_arguments['process_end_year'] )
+    team_rolling_df     = filter_df_year( output_dfs['team_df']    , input_arguments['process_start_year'], input_arguments['process_end_year'] )
+    opposing_rolling_df = filter_df_year( output_dfs['opposing_df'], input_arguments['process_start_year'], input_arguments['process_end_year'] )
+    
 
     joined_df = team_rolling_df[key_fields+team_fields].merge(
         opposing_rolling_df[key_fields+opposing_fields],
@@ -698,7 +706,7 @@ def main():
     print(reg_models.model(continuous_values_cols[0]))
 
     class_models = generate_models_from_list(
-        fields_to_model=class_value_list,
+        fields_to_model=class_values_list,
         feature_df = scaled_joined_df,
         value_df = values_df,
         model = LogisticRegression(),

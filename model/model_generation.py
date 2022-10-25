@@ -5,6 +5,17 @@ sys.path.append('/home/sean/Documents/import_test/util')
 #from util.utilities import PCACols,ZScaler
 from sklearn.decomposition import PCA
 
+from sklearn.utils import shuffle
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GridSearchCV
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.neural_network import MLPRegressor
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+
 import numpy as np
 import pandas as pd
 import os
@@ -96,7 +107,72 @@ class PCACols:
     def transform(self,inp_df):
         return self.model_pca.transform(inp_df[self.columns])
 
+class ModelWrapper:
+    def __init__(
+        self,
+        input_x_df,
+        input_y_df,
+        key_fields=['season','week','team','opponent']
+    ):
+        self.x_df = input_x_df.dropna()
+        self.y_df = input_y_df.loc[self.x_df.index].dropna()
+        assert self.x_df.shape[0]==self.y_df.shape[0] # X and Y must have same dimension
+        self.key_fields = key_fields
+        self.model_dict = {}
+        self.col_dict = {}
+        self.cv_dict = {}
+        
+    def __get_values__(self,input_df,cols):
+        return input_df.drop(columns=self.key_fields)[cols].values
+
+    def get_model_dict(self):
+        return self.model_dict
     
+    def get_cv_dict(self):
+        return self.model_dict
+    
+    def model(self,name):
+        assert name in self.model_dict
+        return self.model_dict[name]
+    
+    def train_model(
+        self,
+        names,
+        model,
+        parameters=None,
+        use_cols=None,
+        test_size=0.20,
+        n_jobs=1,
+        scoring=None,
+        cv=3,
+    ):
+        if isinstance(names,str):
+            names=[names]
+        assert isinstance(names,list)
+        for name in names:
+            assert name in self.y_df.columns.values
+        
+        for name in names:
+            if (use_cols is None):
+                use_cols = self.x_df.drop(columns=self.key_fields).columns.values
+            self.col_dict = use_cols
+            features = self.__get_values__(self.x_df,use_cols)
+            values   = self.__get_values__(self.y_df,name)
+
+            x_shuf, y_shuf = shuffle( features, values )
+            x_train, x_test, y_train, y_test = train_test_split( x_shuf, y_shuf, test_size=test_size )
+
+            if (parameters is None):
+                self.model_dict[name] = model.fit(x_train,y_train)
+            else:
+                gscv = GridSearchCV( model, parameters, n_jobs=n_jobs, scoring=scoring,cv=cv )
+                gscv.fit(x_train, y_train)
+                self.cv_dict[name] = gscv
+                self.model_dict[name] = gscv.best_estimator_.fit(x_train,y_train)
+
+            print("Fit model for "+name+", test data score=",str(self.model_dict[name].score(x_test,y_test)))
+
+            
 def aggregate_read_data_files(inp_str,inp_path,inp_year_list):
     file_list=[]
     for fn in os.listdir(inp_path):
@@ -124,6 +200,34 @@ def generate_df_rolling_means(
             output_df.loc[roll_ind,new_col] = input_df.loc[roll_ind,col].rolling(n_lookback).mean()
     return output_df
 
+def gen_field_ranges( inp_df, col, range_starts ):
+    assert isinstance(range_starts,list) # Need a list input
+    assert len(range_starts)>1 # Only operate when there are a number of values
+    
+    out_df = inp_df.copy()
+    
+    for i in range(0,len(range_starts)-1):
+        start = range_starts[i]
+        end   = range_starts[i+1] - 1
+        if (start==end):
+            new_col = col + "_range__" + str(start)
+            out_df[new_col] = 0
+            out_df.loc[ out_df[col].astype(int) == start,new_col] = 1
+        else:
+            new_col = col + "_range_" + str(start) + "_" + str(end)
+            out_df[new_col] = 0
+            out_df.loc[
+                (out_df[col].astype(int) >= start) &
+                (out_df[col].astype(int) <= end  ),
+                new_col
+            ] = 1
+
+    end = range_starts[-1]
+    new_col = col + "_range_" + str(end) + "_"
+    out_df[new_col] = 0
+    out_df.loc[ out_df[col].astype(int) == end,new_col] = 1
+    
+    return out_df
 
 # Generate all the features, including using opposing team stats
 def generate_weekly_team_features_values( inp_df, key_fields, n_rolling ):
@@ -333,6 +437,87 @@ def gen_pca_model( inp_df, inp_fields, n_components ):
     )
     return pca_model
 
+
+def generate_models_from_list(
+        fields_to_model,
+        feature_df =None,
+        value_df = None,
+        reuse_model_wrapper = None,
+        model = None,
+        cv_parameters = None,
+        classifier = False,
+        use_cols=None,
+        scoring=None,
+        test_size=0.20,
+        n_jobs=1,
+        cv=3,
+):
+    assert ((feature_df is not None) and (value_df is not None)) or ( reuse_model_wrapper is not None )
+    
+    if (isinstance(fields_to_model,str)):
+        fields_to_model=[fields_to_model]
+    assert isinstance(fields_to_model,list) # input_fields must be list
+    
+    # Need to verify model, parameters are either singular, or match the dimension of fields
+    if ( model is None ):
+        if ( classifier ):
+            model=LogisticRegression()
+        else:
+            model=LinearRegression()
+
+    model_list = []
+    if ( isinstance(model,list) ):
+        assert len(model)==len(fields_to_model) # Must have same input lens
+        model_list=model
+    else:
+        for i in range(0,len(fields_to_model)):
+            model_list.append(model)
+
+    use_col_list = []
+    if (isinstance(use_cols,list) and (len(use_cols)>0) ):
+        if (isinstance(use_cols[0],list)):
+            assert len(use_cols)==len(fields_to_model) # Must have same input lens
+        use_col_list = use_cols
+    else:
+        for i in range(0,len(fields_to_model)):
+            use_col_list.append(use_cols)
+
+    scoring_list = []
+    if (isinstance(scoring,list)):
+        assert len(scoring)==len(fields_to_model) # Must have same input lens
+        scoring_list = scoring
+    else:
+        for i in range(0,len(fields_to_model)):
+            scoring_list.append(scoring)
+
+    cv_param_list = []
+    if (isinstance(cv_parameters,list)):
+        assert len(cv_parameters)==len(fields_to_model) # Must have same input lens
+        cv_param_list = cv_parameters
+    else:
+        for i in range(0,len(fields_to_model)):
+            cv_param_list.append(cv_parameters)
+
+    my_models = 0
+    if (reuse_model_wrapper is None):
+        my_models = ModelWrapper( feature_df, value_df )
+    else:
+        my_models = reuse_model_wrapper
+
+    for i in range(0,len(fields_to_model)):
+        my_models.train_model(
+            fields_to_model[i],
+            model_list[i],
+            parameters = cv_param_list[i],
+            use_cols = use_col_list[i],
+            scoring=scoring_list[i],
+            test_size=test_size,
+            n_jobs=n_jobs,
+            cv=cv
+        )
+    return my_models
+    
+
 #TODO:change
 def get_model_path(version=__model_version__):
     return os.getcwd()+'/data/model/'+version+'/'
@@ -414,35 +599,114 @@ def main():
     key_fields = ['season','week','team','opponent']
 
     output_dfs = generate_weekly_team_features_values( norm_weekly_df, key_fields, input_arguments['n_rolling'] )
+    
+    values_df           = output_dfs['value_df']
+    team_rolling_df     = output_dfs['team_df']
+    opposing_rolling_df = output_dfs['opposing_df']
+    team_fields         = output_dfs['team_fields']
+    opposing_fields     = output_dfs['opposing_fields']
 
-
+    joined_df = team_rolling_df[key_fields+team_fields].merge(
+        opposing_rolling_df[key_fields+opposing_fields],
+        on=key_fields
+    )
+    features_df = joined_df.drop(columns=['season','week','team','opponent']).dropna()
+    
     # Zscale fields
     #TODO:conditional load
     scaler = gen_scale_model(output_dfs)
     print(scaler)
     scaled_dict = scale_combine_team_opposition( output_dfs, scaler, key_fields )
 
-    valid_indexes = scaled_dict['joined_weekly_df'].index
-    values_df = output_dfs['value_df'].loc[valid_indexes]
+    scaled_joined_df = scaled_dict['joined_weekly_df']
+    scaled_features_df = scaled_joined_df.drop(columns=['season','week','team','opponent']).dropna()
     
-    # Reduce fields
+    #TODO:Consider inplementing Reduce fields
     #TODO:conditional load
-    team_pca = gen_pca_model(
-        scaled_dict['joined_weekly_df'],
-        scaled_dict['team_fields'],
-        input_arguments['n_components_team']
-    )
-    transformed_team = team_pca.transform( scaled_dict['joined_weekly_df'] )
+    #team_pca = gen_pca_model(
+    #    scaled_dict['joined_weekly_df'],
+    #    scaled_dict['team_fields'],
+    #    input_arguments['n_components_team']
+    #)
+    #transformed_team = team_pca.transform( scaled_dict['joined_weekly_df'] )
+    #opp_pca = gen_pca_model(
+    #    scaled_dict['joined_weekly_df'],
+    #    scaled_dict['opposing_fields'],
+    #    input_arguments['n_components_opp']
+    #)
+    #transformed_opp = opp_pca.transform( scaled_dict['joined_weekly_df'] )
+    #feature_array = np.concatenate([transformed_team,transformed_opp],axis=1)
+
+
+    values_cols = [
+        'rushing_yards', 'receiving_yards', 'passing_yards',
+        'complete_pass',
+        'touchdown', 'pass_touchdown', 'rush_touchdown', 'td_yards_40',
+        'extra_point_success',
+        'close_field_goal_attempts', 'close_field_goal_success_rate',
+        'far_field_goal_attempts', 'far_field_goal_success_rate',
+        'sack',
+        'fumble', 'fumble_recovery_rate',
+        'offensive_interception',
+        'defensive_points_allowed',
+        'defensive_fumble_forced', 'defensive_interception'
+    ]
+
+    continuous_values_cols = [
+        'rushing_yards', 'receiving_yards',
+    ]
+
+    class_values_ranges = {
+        'complete_pass':[0,10,15,20,25,30,35],
+        'touchdown':[0,1,2,3,4,5],
+        'pass_touchdown':[0,1,2,3,4],
+        'rush_touchdown':[0,1,2,3,4],
+        'td_yards_40':[0,1,2],
+        'close_field_goal_attempts':[0,1,2,3,4],
+        'far_field_goal_attempts':[0,1,2,3],
+        'sack':[0,2,4,6,8],
+        'fumble':[0,2,4,6],
+        'offensive_interception':[0,2,4],
+        'defensive_points_allowed':[0,1,7,14,21,28,35],
+        'defensive_fumble_forced':[0,2,4],
+        'defensive_interception':[0,2,4],
+    }
+
+    class_cols = {}
+    class_values_list = []
     
-    opp_pca = gen_pca_model(
-        scaled_dict['joined_weekly_df'],
-        scaled_dict['opposing_fields'],
-        input_arguments['n_components_opp']
+    for key in class_values_ranges:
+        values_df = gen_field_ranges(values_df,key,class_values_ranges[key])
+    
+        for col in values_df:
+            if ( (key in col) and ("_range_" in col) ):
+                if (key in class_cols):
+                    class_cols[key].append(col)
+                else:
+                    class_cols[key] = [col]
+                class_values_list.append(col)
+
+    reg_models = generate_models_from_list(
+        fields_to_model=continuous_values_cols,
+        feature_df = joined_df,
+        value_df = values_df,
+        model = LinearRegression(),
+        test_size=0.20,
+        n_jobs=8,
+        cv=3,
     )
-    transformed_opp = opp_pca.transform( scaled_dict['joined_weekly_df'] )
+    print(reg_models.model(continuous_values_cols[0]))
 
-    feature_array = np.concatenate([transformed_team,transformed_opp],axis=1)
-
-
+    class_models = generate_models_from_list(
+        fields_to_model=class_value_list,
+        feature_df = scaled_joined_df,
+        value_df = values_df,
+        model = LogisticRegression(),
+        test_size=0.20,
+        n_jobs=8,
+        cv=3,
+    )
+    
+                
 if __name__ == "__main__":
     main()

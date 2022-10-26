@@ -181,16 +181,14 @@ class ModelWrapper:
 
     def predict(self,name,inp_df):
         assert isinstance(name,str)
-        for name in names:
-            assert name in self.model_dict
+        assert name in self.model_dict
 
         features = self.__get_values__(inp_df,self.col_dict[name])
         return self.model_dict[name].predict(features)
 
     def predict_proba(self,name,inp_df):
         assert isinstance(name,str)
-        for name in names:
-            assert name in self.model_dict
+        assert name in self.model_dict
 
         features = self.__get_values__(inp_df,self.col_dict[name])
         return self.model_dict[name].predict_proba(features)
@@ -550,6 +548,9 @@ def generate_models_from_list(
 def get_model_path(version=__model_version__):
     return os.getcwd()+'/data/model/'+version+'/'
 
+def get_prediction_path(version=__model_version__):
+    return os.getcwd()+'/data/predicted_values/'+version+'/'
+
 
 #def write_normalized_team_data(input_df,write_dir):
 #    os.makedirs(write_dir,exist_ok=True)
@@ -584,6 +585,13 @@ def read_args():
         help='The ending year for input data (Latest is current year)'
     )
 
+    parser.add_argument('--predict_start_year', type=int, nargs='?', default=1999,
+        help='The starting year for input data (Earliest available data is from 1999)'
+    )
+    parser.add_argument('--predict_end_year', type=int, nargs='?',default=datetime.date.today().year,
+        help='The ending year for input data (Latest is current year)'
+    )
+
     parser.add_argument('--n_rolling', type=int, nargs='?',default=3,
         help='The number of months for lookback'
     )
@@ -610,6 +618,14 @@ def read_args():
         help='Optional ML file to save, othwerwise uses date'
     )
 
+    parser.add_argument('--predict_values', action='store_true',
+        help='Whether to forecast values for predict years or not'
+    )
+
+    parser.add_argument('--output_data_file_name', type=str, nargs='?',
+        help='Optional save data with prediction'
+    )
+
     args = parser.parse_args()
     print(args)
 
@@ -621,7 +637,9 @@ def read_args():
     assert input_arguments['process_start_year']>=1999 # Earliest year is 1999
     assert input_arguments['process_end_year']<=datetime.date.today().year # Latest year cannot exceed current
     assert input_arguments['process_start_year']<=input_arguments['process_end_year'] # Start year cannot be greater than end year
-    assert input_arguments['n_rolling'] > 0 # Lookback months must be greater than 0
+    assert input_arguments['predict_start_year']>=1999 # Earliest year is 1999
+    assert input_arguments['predict_end_year']<=datetime.date.today().year # Latest year cannot exceed current
+    assert input_arguments['predict_start_year']<=input_arguments['predict_end_year'] # Start year cannot be gr    assert input_arguments['n_rolling'] > 0 # Lookback months must be greater than 0
     assert input_arguments['n_components_team'] > 0 # Must be greater than 0
     assert input_arguments['n_components_opp'] > 0 # Must be greater than 0
 
@@ -634,6 +652,9 @@ def read_args():
         fn = get_model_path()+input_arguments['input_models_file_name']
         if ( not os.path.exists(fn) ):
             raise IOError("File does not exist: "+fn)
+
+    if (input_arguments['predict_values']):
+        assert input_arguments['output_data_file_name'] is not None # If outputting data, must have file name
 
     return input_arguments
 
@@ -735,6 +756,12 @@ def main():
         'rushing_yards', 'receiving_yards',
     ]
 
+    propogate_cols = [
+        'close_field_goal_success_rate',
+        'far_field_goal_success_rate',
+        'fumble_recovery_rate',
+    ]
+
     class_values_ranges = {
         'complete_pass':[0,10,15,20,25,30,35],
         'touchdown':[0,1,2,3,4,5],
@@ -812,6 +839,41 @@ def main():
             combined_models = pkl.load(f)
         print("Using file "+input_name)
 
+    if (input_arguments['predict_values']):
+
+        scaled_joined_out_df = filter_df_year(
+            scaled_joined_df,
+            input_arguments['predict_start_year'],
+            input_arguments['predict_end_year']
+        ).dropna()
+
+        joined_out_df = filter_df_year(
+            joined_df,
+            input_arguments['predict_start_year'],
+            input_arguments['predict_end_year']
+        ).dropna().iloc[scaled_joined_out_df.index]
+
+        values_out_df = filter_df_year(
+            values_df,
+            input_arguments['predict_start_year'],
+            input_arguments['predict_end_year']
+        ).dropna().iloc[scaled_joined_out_df.index]
+
+        output_dict = {
+            'propogate_df':values_df[key_fields+propogate_cols],
+        }
+
+        for col in combined_models['reg_models'].get_model_predicted_fields():
+            output_dict[col] = combined_models['reg_models'].predict(col,joined_out_df)
+
+        for col in combined_models['class_models'].get_model_predicted_fields():
+            output_dict[col] = combined_models['class_models'].predict_proba(col,scaled_joined_out_df)
+
+        os.makedirs(get_model_path(),exist_ok=True)
+        output_name = get_model_path() + input_arguments['output_data_file_name']
+        with open(output_name, 'wb') as f:
+            pkl.dump(output_dict,f)
+        print("Wrote "+output_name)
 
 if __name__ == "__main__":
     main()

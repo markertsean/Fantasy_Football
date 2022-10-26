@@ -1,4 +1,4 @@
-import sys        
+import sys
 #TODO: modify this
 sys.path.append('/home/sean/Documents/import_test/util')
 
@@ -16,6 +16,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 
+import pickle as pkl
 import numpy as np
 import pandas as pd
 import os
@@ -35,7 +36,7 @@ class ZScaler:
             if (not isinstance(columns,list)):
                 columns = [columns]
             self.add(inp_df[columns])
-            
+
     def __repr__(self):
         out_str = ""
         for key in self.scale_dict:
@@ -45,7 +46,7 @@ class ZScaler:
                 self.scale_dict[key]['std'],
             )
         return out_str
-    
+
     def __str__(self):
         return "Member of ZScaler\n"+self.__repr__()
 
@@ -57,10 +58,10 @@ class ZScaler:
 
     def remove(self,col):
         del self.scale_dict[col]
-    
+
     def get_dict(self):
         return self.scale_dict
-    
+
     def get(self,col,kind=None):
         if (kind is None):
             return self.scale_dict[col]
@@ -68,7 +69,7 @@ class ZScaler:
             return self.scale_dict
         else:
             raise ValueError("kind must be 'mean' or 'std'")
-            
+
     def scale_cols(self,inp_df,cols):
         out_df = inp_df.copy()
         for col in cols:
@@ -84,7 +85,7 @@ class PCACols:
         self.n_components = n_components
         self.model_pca = PCA(n_components=n_components)
         self.model_pca.fit(inp_df[self.columns])
-            
+
     def __repr__(self):
         out_str = ""
         out_str+= "\tN components = "+str(self.n_components)+"\n"
@@ -97,13 +98,13 @@ class PCACols:
             out_str+="\t\t"+str(var)+",\n"
         out_str+= "\t]\n"
         return out_str
-    
+
     def __str__(self):
         return "Member of PLCACols\n"+self.__repr__()
 
     def PCA(self):
         return self.model_pca
-    
+
     def transform(self,inp_df):
         return self.model_pca.transform(inp_df[self.columns])
 
@@ -121,20 +122,26 @@ class ModelWrapper:
         self.model_dict = {}
         self.col_dict = {}
         self.cv_dict = {}
-        
+
     def __get_values__(self,input_df,cols):
         return input_df.drop(columns=self.key_fields)[cols].values
 
     def get_model_dict(self):
         return self.model_dict
-    
+
+    def get_model_predicted_fields(self):
+        return self.col_dict.keys()
+
+    def get_model_predictor_fields(self):
+        return self.col_dict
+
     def get_cv_dict(self):
-        return self.model_dict
-    
+        return self.cv_dict
+
     def model(self,name):
         assert name in self.model_dict
         return self.model_dict[name]
-    
+
     def train_model(
         self,
         names,
@@ -151,12 +158,12 @@ class ModelWrapper:
         assert isinstance(names,list)
         for name in names:
             assert name in self.y_df.columns.values
-        
+
         for name in names:
             if (use_cols is None):
                 use_cols = self.x_df.drop(columns=self.key_fields).columns.values
-            self.col_dict = use_cols
-            features = self.__get_values__(self.x_df,use_cols)
+            self.col_dict[name] = use_cols
+            features = self.__get_values__(self.x_df,self.col_dict[name])
             values   = self.__get_values__(self.y_df,name)
 
             x_shuf, y_shuf = shuffle( features, values )
@@ -172,7 +179,22 @@ class ModelWrapper:
 
             print("Fit model for "+name+", test data score=",str(self.model_dict[name].score(x_test,y_test)))
 
-            
+    def predict(self,name,inp_df):
+        assert isinstance(name,str)
+        for name in names:
+            assert name in self.model_dict
+
+        features = self.__get_values__(inp_df,self.col_dict[name])
+        return self.model_dict[name].predict(features)
+
+    def predict_proba(self,name,inp_df):
+        assert isinstance(name,str)
+        for name in names:
+            assert name in self.model_dict
+
+        features = self.__get_values__(inp_df,self.col_dict[name])
+        return self.model_dict[name].predict_proba(features)
+
 def aggregate_read_data_files(inp_str,inp_path,inp_year_list):
     file_list=[]
     for fn in os.listdir(inp_path):
@@ -203,9 +225,9 @@ def generate_df_rolling_means(
 def gen_field_ranges( inp_df, col, range_starts ):
     assert isinstance(range_starts,list) # Need a list input
     assert len(range_starts)>1 # Only operate when there are a number of values
-    
+
     out_df = inp_df.copy()
-    
+
     for i in range(0,len(range_starts)-1):
         start = range_starts[i]
         end   = range_starts[i+1] - 1
@@ -226,7 +248,7 @@ def gen_field_ranges( inp_df, col, range_starts ):
     new_col = col + "_range_" + str(end) + "_"
     out_df[new_col] = 0
     out_df.loc[ out_df[col].astype(int) == end,new_col] = 1
-    
+
     return out_df
 
 # Generate all the features, including using opposing team stats
@@ -248,7 +270,7 @@ def generate_weekly_team_features_values( inp_df, key_fields, n_rolling ):
     ).rename(
         columns={
         'interception': 'offensive_interception',
-        'fumble_forced': 'offensive_fumble_forced',    
+        'fumble_forced': 'offensive_fumble_forced',
     })
 
 
@@ -263,17 +285,17 @@ def generate_weekly_team_features_values( inp_df, key_fields, n_rolling ):
     weekly_df['close_field_goal_success_rate'] = weekly_df['kick_distance_0_39_success'] / (
         weekly_df['close_field_goal_attempts'] + 1e-7
     )
-    
+
     weekly_df['kick_distance_40_success'] = weekly_df['kick_distance_40_49_success'] + weekly_df['kick_distance_50_success']
     weekly_df['kick_distance_40_fail'] = weekly_df['kick_distance_40_49_fail'] + weekly_df['kick_distance_50_fail']
-    
+
     weekly_df['far_field_goal_attempts'] = (
         weekly_df['kick_distance_40_success'] + weekly_df['kick_distance_40_fail']
     )
     weekly_df['far_field_goal_success_rate'] = weekly_df['kick_distance_40_success'] / (
         weekly_df['far_field_goal_attempts'] + 1e-7
     )
-    
+
     weekly_df['pass_play_rate'] = weekly_df['pass_attempt'] / (
         weekly_df['pass_attempt'] + weekly_df['rush_attempt'] + 1e-7
     )
@@ -286,60 +308,60 @@ def generate_weekly_team_features_values( inp_df, key_fields, n_rolling ):
     weekly_df['average_rush_yards'] = weekly_df['rushing_yards'] / (
         weekly_df['rush_attempt'] + 1e-7
     )
-    
+
     weekly_df['fumble_recovery_rate'] = weekly_df['recovery'] / ( weekly_df['fumble'] + 1e-7 )
-    
-    
+
+
     team_fields = [
         'rushing_yards', 'passing_yards', 'receiving_yards',
         'pass_play_rate', 'pass_complete_rate',
         'average_pass_yards', 'average_rush_yards',
         'passing_yards_40', 'rushing_recieving_yards_40',
-    
+
         'pass_touchdown', 'rush_touchdown', 'td_yards_40',
         'extra_point_success_rate',
         'close_field_goal_attempts', 'close_field_goal_success_rate',
         'far_field_goal_attempts', 'far_field_goal_success_rate',
-        
-        'offensive_interception',    
+
+        'offensive_interception',
         'offensive_fumble_forced', 'fumble_not_forced', 'recovery',
         'fumble_recovery_rate',
-        
+
         'penalty_yards',
-        
+
         'assist_tackle', 'qb_hit', 'solo_tackle', 'sack',
-        
+
         'defensive_points_allowed',
         'defensive_fumble_forced',
         'defensive_interception',
     ]
     team_weekly_fields_df = weekly_df[key_fields+team_fields].copy()
-    
-    
+
+
     rolling_weekly_df = generate_df_rolling_means(
         team_weekly_fields_df,
         n_rolling,
         team_fields,
         save_fields = ['season','week','team','opponent'],
     )
-    
+
     rename_dict = {'team':'opponent','opponent':'team'}
     opp_fields = []
     opp_fields_to_use = [
         'rushing_yards', 'receiving_yards',
         'pass_play_rate', 'pass_complete_rate',
         'passing_yards_40', 'rushing_recieving_yards_40',
-    
+
         'pass_touchdown', 'rush_touchdown',
         'extra_point_success_rate',
         'close_field_goal_success_rate',
         'far_field_goal_success_rate',
-    
+
         'qb_hit', 'sack',
-        
+
         'offensive_interception',
         'offensive_fumble_forced',
-        
+
         'defensive_points_allowed',
         'defensive_fumble_forced',
         'defensive_interception',
@@ -349,11 +371,11 @@ def generate_weekly_team_features_values( inp_df, key_fields, n_rolling ):
         rename_dict[field_x] = 'opponent_' + field_x
         opp_fields.append(rename_dict[field_x])
         opposing_team_df = rolling_weekly_df.rename(columns=rename_dict)[key_fields+opp_fields].copy()
-    
+
     team_fields_to_scale = []
     for field in team_fields:
         team_fields_to_scale.append( field + '_' + str(n_rolling) )
-    
+
 
     #TODO: move
     forecast_values_for_team = [
@@ -374,7 +396,7 @@ def generate_weekly_team_features_values( inp_df, key_fields, n_rolling ):
         'fumble_recovery_rate',
         'fumble',
         'offensive_interception',
-        
+
         'defensive_points_allowed', # scores for D
         'defensive_fumble_forced', # scores for D
         'defensive_interception', # scores for D
@@ -409,7 +431,7 @@ def gen_scale_model( inp_dict ):
 def scale_combine_team_opposition( inp_dict, scaler, key_fields ):
     rolling_scaled_weekly_df = scaler.scale_cols( inp_dict['team_df'], inp_dict['team_fields']).dropna()
     opposing_scaled_weekly_df = scaler.scale_cols( inp_dict['opposing_df'], inp_dict['opposing_fields']).dropna()
-    
+
     rolling_scaled_weekly_fields = []
     for field in rolling_scaled_weekly_df.columns.values:
         if (field not in key_fields):
@@ -424,7 +446,7 @@ def scale_combine_team_opposition( inp_dict, scaler, key_fields ):
         opposing_scaled_weekly_df,
         on=['season','week','team','opponent']
     )
-    
+
     return {
         'joined_weekly_df': joined_weekly_df,
         'team_fields': rolling_scaled_weekly_fields,
@@ -459,11 +481,11 @@ def generate_models_from_list(
         cv=3,
 ):
     assert ((feature_df is not None) and (value_df is not None)) or ( reuse_model_wrapper is not None )
-    
+
     if (isinstance(fields_to_model,str)):
         fields_to_model=[fields_to_model]
     assert isinstance(fields_to_model,list) # input_fields must be list
-    
+
     # Need to verify model, parameters are either singular, or match the dimension of fields
     if ( model is None ):
         if ( classifier ):
@@ -522,7 +544,7 @@ def generate_models_from_list(
             cv=cv
         )
     return my_models
-    
+
 
 #TODO:change
 def get_model_path(version=__model_version__):
@@ -545,7 +567,7 @@ def get_model_path(version=__model_version__):
 
 # Only start and end year, can read from default max range
 def read_args():
-    
+
     parser = argparse.ArgumentParser(description='Read and save data from nfl_data_py requests using input years')
 
     parser.add_argument('--norm_start_year', type=int, nargs='?', default=1999,
@@ -572,13 +594,27 @@ def read_args():
         help='The number of PCA components for the opposing team data'
     )
 
+    parser.add_argument('--input_scaler_file_name', type=str, nargs='?',
+        help='Optional scaler file to load/use'
+    )
+
+    parser.add_argument('--output_scaler_file_name', type=str, nargs='?',
+        help='Optional scaler file to save, otherwise uses date'
+    )
+
+    parser.add_argument('--input_models_file_name', type=str, nargs='?',
+        help='Optional ML file to load/use'
+    )
+
+    parser.add_argument('--output_models_file_name', type=str, nargs='?',
+        help='Optional ML file to save, othwerwise uses date'
+    )
+
     args = parser.parse_args()
     print(args)
-    return vars(args)
 
-def main():
-    input_arguments = read_args()
-    
+    input_arguments = vars(args)
+
     assert input_arguments['norm_start_year']>=1999 # Earliest year is 1999
     assert input_arguments['norm_end_year']<=datetime.date.today().year # Latest year cannot exceed current
     assert input_arguments['norm_start_year']<=input_arguments['norm_end_year'] # Start year cannot be greater than end year
@@ -588,6 +624,22 @@ def main():
     assert input_arguments['n_rolling'] > 0 # Lookback months must be greater than 0
     assert input_arguments['n_components_team'] > 0 # Must be greater than 0
     assert input_arguments['n_components_opp'] > 0 # Must be greater than 0
+
+    if (input_arguments['input_scaler_file_name'] is not None):
+        fn = get_model_path()+input_arguments['input_scaler_file_name']
+        if ( not os.path.exists(fn) ):
+            raise IOError("File does not exist: "+fn)
+
+    if (input_arguments['input_models_file_name'] is not None):
+        fn = get_model_path()+input_arguments['input_models_file_name']
+        if ( not os.path.exists(fn) ):
+            raise IOError("File does not exist: "+fn)
+
+    return input_arguments
+
+def main():
+
+    input_arguments = read_args()
 
     #TODO: change project path to be better handled
     project_path = os.getcwd()+"/"#'/home/sean/Documents/Fantasy_Football/'
@@ -605,30 +657,49 @@ def main():
     key_fields = ['season','week','team','opponent']
 
     output_dfs = generate_weekly_team_features_values( norm_weekly_df, key_fields, input_arguments['n_rolling'] )
-    
+
     team_fields         = output_dfs['team_fields']
     opposing_fields     = output_dfs['opposing_fields']
 
     values_df           = filter_df_year( output_dfs['value_df']   , input_arguments['process_start_year'], input_arguments['process_end_year'] )
     team_rolling_df     = filter_df_year( output_dfs['team_df']    , input_arguments['process_start_year'], input_arguments['process_end_year'] )
     opposing_rolling_df = filter_df_year( output_dfs['opposing_df'], input_arguments['process_start_year'], input_arguments['process_end_year'] )
-    
+
 
     joined_df = team_rolling_df[key_fields+team_fields].merge(
         opposing_rolling_df[key_fields+opposing_fields],
         on=key_fields
     )
     features_df = joined_df.drop(columns=['season','week','team','opponent']).dropna()
-    
+
     # Zscale fields
-    #TODO:conditional load
-    scaler = gen_scale_model(output_dfs)
-    print(scaler)
+    if (input_arguments['input_scaler_file_name'] is None):
+        scaler = gen_scale_model(output_dfs)
+
+        if (input_arguments['output_scaler_file_name'] is not None):
+            output_name = get_model_path() + input_arguments['output_scaler_file_name']
+        else:
+            output_name = get_model_path() + \
+                "scaler_"+\
+                str(input_arguments["process_start_year"])+\
+                "_"+\
+                str(input_arguments["process_end_year"])+\
+                ".pkl"
+        os.makedirs(get_model_path(),exist_ok=True)
+        with open(output_name,'wb') as f:
+            pkl.dump(scaler,f)
+        print("Wrote "+output_name)
+    else:
+        input_name = get_model_path()+input_arguments['input_scaler_file_name']
+        print("Using file "+input_name)
+        with open(input_name, 'rb') as f:
+            scaler = pkl.load(f)
+
     scaled_dict = scale_combine_team_opposition( output_dfs, scaler, key_fields )
 
     scaled_joined_df = scaled_dict['joined_weekly_df']
     scaled_features_df = scaled_joined_df.drop(columns=['season','week','team','opponent']).dropna()
-    
+
     #TODO:Consider inplementing Reduce fields
     #TODO:conditional load
     #team_pca = gen_pca_model(
@@ -682,10 +753,10 @@ def main():
 
     class_cols = {}
     class_values_list = []
-    
+
     for key in class_values_ranges:
         values_df = gen_field_ranges(values_df,key,class_values_ranges[key])
-    
+
         for col in values_df:
             if ( (key in col) and ("_range_" in col) ):
                 if (key in class_cols):
@@ -694,27 +765,53 @@ def main():
                     class_cols[key] = [col]
                 class_values_list.append(col)
 
-    reg_models = generate_models_from_list(
-        fields_to_model=continuous_values_cols,
-        feature_df = joined_df,
-        value_df = values_df,
-        model = LinearRegression(),
-        test_size=0.20,
-        n_jobs=8,
-        cv=3,
-    )
-    print(reg_models.model(continuous_values_cols[0]))
+    if (input_arguments['input_models_file_name'] is None):
+        reg_models = generate_models_from_list(
+            fields_to_model=continuous_values_cols,
+            feature_df = joined_df,
+            value_df = values_df,
+            model = LinearRegression(),
+            test_size=0.20,
+            n_jobs=8,
+            cv=3,
+        )
+        print(reg_models.model(continuous_values_cols[0]))
 
-    class_models = generate_models_from_list(
-        fields_to_model=class_values_list,
-        feature_df = scaled_joined_df,
-        value_df = values_df,
-        model = LogisticRegression(),
-        test_size=0.20,
-        n_jobs=8,
-        cv=3,
-    )
-    
-                
+        class_models = generate_models_from_list(
+            fields_to_model=class_values_list,
+            feature_df = scaled_joined_df,
+            value_df = values_df,
+            model = LogisticRegression(),
+            test_size=0.20,
+            n_jobs=8,
+            cv=3,
+        )
+
+        combined_models = {
+            'reg_models': reg_models,
+            'class_models': class_models,
+        }
+
+        if (input_arguments['output_models_file_name'] is not None):
+            output_name = get_model_path() + input_arguments['output_models_file_name']
+        else:
+            output_name = get_model_path() + \
+                "models_"+\
+                str(input_arguments["process_start_year"])+\
+                "_"+\
+                str(input_arguments["process_end_year"])+\
+                ".pkl"
+        os.makedirs(get_model_path(),exist_ok=True)
+        with open(output_name, 'wb') as f:
+            pkl.dump(combined_models,f)
+        print("Wrote file "+output_name)
+
+    else:
+        input_name = get_model_path()+input_arguments['input_models_file_name']
+        with open(input_name,'rb') as f:
+            combined_models = pkl.load(f)
+        print("Using file "+input_name)
+
+
 if __name__ == "__main__":
     main()

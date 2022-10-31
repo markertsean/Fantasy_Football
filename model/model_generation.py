@@ -860,7 +860,7 @@ def main():
         ).dropna().iloc[scaled_joined_out_df.index]
 
         output_dict = {
-            'propogate_df':values_df[key_fields+propogate_cols],
+            'propogate_df':values_out_df[key_fields+propogate_cols],
         }
 
         for col in combined_models['reg_models'].get_model_predicted_fields():

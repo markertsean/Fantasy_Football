@@ -6,6 +6,7 @@ import datetime
 import os
 import sys
 
+#TODO: proper implementation
 sys.path.append('/home/sean/Documents/Fantasy_Football/')
 
 from import_raw import run_raw_nfl_import
@@ -71,7 +72,7 @@ def rollup_df(inp_df,key_fields,extra_fields):
 
 
 def load_process_kick_data(raw_input_path,input_year_list):
-    kicking_df = utilities.aggregate_read_data_files('kick_points',raw_input_path,input_year_list)
+    kicking_df = utilities.aggregate_read_raw_data_files('kick_points',raw_input_path,input_year_list)
     kicking_df['team'] = kicking_df['posteam']
 
     kicking_df['extra_point_attempt'] = kicking_df['extra_point_attempt'].fillna(0).astype(int)

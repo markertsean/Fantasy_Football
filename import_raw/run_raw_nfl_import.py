@@ -7,6 +7,7 @@ import os
 import pickle as pkl
 import sys
 
+#TODO: proper implementation
 sys.path.append('/home/sean/Documents/Fantasy_Football/')
 
 from util import utilities

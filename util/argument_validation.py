@@ -1,5 +1,13 @@
 import argparse
 import datetime
+import os
+import sys
+
+#TODO: proper implementation
+sys.path.append('/home/sean/Documents/Fantasy_Football/')
+
+from model import model_generation
+
 
 def run_input_year_check(input_arguments,start_str,end_str):
     assert input_arguments[start_str]>=1999, start_str+" must be greater than 1999!"
@@ -27,6 +35,7 @@ def run_argument_validation(input_arguments):
         ('generate_model' in input_arguments) and
         (input_arguments['generate_model'])
     ):
+        run_input_year_check(input_arguments,'norm_start_year','norm_end_year')
         run_input_year_check(input_arguments,'process_start_year','process_end_year')
         run_input_gt_0_check(input_arguments,'n_rolling')
         run_input_gt_0_check(input_arguments,'n_components_team')
@@ -62,7 +71,7 @@ def run_argument_validation(input_arguments):
             ('input_models_file_name' in input_arguments) and
             (input_arguments['input_models_file_name'] is not None)
         ):
-            fn = get_model_path(
+            fn = model_generation.get_model_path(
                 input_arguments['model_version']
             )+input_arguments['input_models_file_name']
             if ( not os.path.exists(fn) ):
@@ -72,10 +81,10 @@ def run_argument_validation(input_arguments):
             ('prediction_file_name' in input_arguments) and
             (input_arguments['prediction_file_name'] is None)
         ):
-            input_arguments['prediction_file_name'] = 'predictions_{}_{}_{}'.format(
+            input_arguments['prediction_file_name'] = 'predictions_{}_{}_{}.pkl'.format(
                 input_arguments['predict_start_year'],
                 input_arguments['predict_end_year'],
-                datetime.today().strftime('%Y%m%d%H%M%S')
+                datetime.date.today().strftime('%Y%m%d')
             )
 
     if (

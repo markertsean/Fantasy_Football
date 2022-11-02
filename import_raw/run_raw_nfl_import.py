@@ -54,7 +54,7 @@ def __write_raw_data__(input_dict,write_dir):
             print("Wrote "+full_output_fn_path)
 
 def get_raw_data_path(version=__import_version__):
-    return os.getcwd()+'/data/raw/'+version+'/'
+    return utilities.get_project_dir()+'data/raw/'+version+'/'
 
 '''
 Runs the import from nfl_data_py for the given year range

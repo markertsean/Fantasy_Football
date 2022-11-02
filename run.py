@@ -20,6 +20,10 @@ def read_args():
     parser.add_argument('--ingest', action='store_true',
         help='Whether to ingest raw input'
     )
+    parser.add_argument('--input_version', type=str, nargs='?',
+        default=run_raw_nfl_import.__import_version__,
+        help='The version to use for import'
+    )
     parser.add_argument('--ingest_start_year', type=int, nargs='?', default=1999,
         help='The starting year for ingestion data (Earliest available data is from 1999)'
     )
@@ -31,6 +35,10 @@ def read_args():
     parser.add_argument('--normalize', action='store_true',
         help='Whether to normalize input'
     )
+    parser.add_argument('--normalization_version', type=str, nargs='?',
+        default=normalize_raw_input.__normalization_version__,
+        help='The version to use for normalization'
+    )
     parser.add_argument('--norm_start_year', type=int, nargs='?', default=1999,
         help='The starting year for normalization data (Earliest available data is from 1999)'
     )
@@ -41,6 +49,10 @@ def read_args():
     
     parser.add_argument('--generate_model', action='store_true',
         help='Whether to create a model or not'
+    )
+    parser.add_argument('--model_version', type=str, nargs='?',
+        default=model_generation.__model_version__,
+        help='The version to use for models'
     )
     parser.add_argument('--input_models_file_name', type=str, nargs='?',
         help='Optional ML file to load/use'
@@ -90,26 +102,14 @@ def read_args():
     parser.add_argument('--analyze', action='store_true',
         help='Whether to generate output plots of predictions or not'
     )
-    parser.add_argument('--top_stats_list', nargs='+',
-        help='Prediction file name to load/use'
-    )
-
-    parser.add_argument('--input_version', type=str, nargs='?',
-        default=run_raw_nfl_import.__import_version__,
-        help='The version to use for import'
-    )
-    parser.add_argument('--normalization_version', type=str, nargs='?',
-        default=normalize_raw_input.__normalization_version__,
-        help='The version to use for normalization'
-    )
-    parser.add_argument('--model_version', type=str, nargs='?',
-        default=model_generation.__model_version__,
-        help='The version to use for models'
-    )
     parser.add_argument('--analyze_version', type=str, nargs='?',
         default=explore_results.__analyze_version__,
         help='The version to use for analyzing results'
     )
+    parser.add_argument('--top_stats_list', nargs='+',
+        help='Prediction file name to load/use'
+    )
+
 
     args = parser.parse_args()
 
@@ -133,9 +133,10 @@ def main():
     input("Press enter to run the program...")
 
     if (input_args['ingest']):
-        run_save_import(input_args)
+        run_raw_nfl_import.run_save_import(input_args)
 
-    
+    if (input_args['normalize']):
+        normalize_raw_input.normalize(input_args)
     
 if __name__ == "__main__":
     main()

@@ -4,28 +4,61 @@ import pickle as pkl
 import argparse
 import datetime
 import os
+import sys
+
+sys.path.append('/home/sean/Documents/Fantasy_Football/')
+
+from import_raw import run_raw_nfl_import
+from util import utilities
+from util import argument_validation
 
 __normalization_version__ = "0.1.0"
 
-'''
-Looks under input path for file starting with input string, that contains an input year
-Combine all and output as dataframe
-'''
-def aggregate_read_data_files(inp_str,inp_path,inp_year_list):
-    file_list=[]
-    for fn in os.listdir(inp_path):
-        if (fn.startswith(inp_str)):
-            for year in inp_year_list:
-                if (str(year) in fn):
-                    file_list.append(pd.read_pickle(inp_path+fn))
-    output_df = pd.concat(file_list)
-    output_df = output_df.loc[
-        ~output_df['posteam'].isnull()&
-        ~output_df['defteam'].isnull()&
-        (output_df['posteam']!='')&
-        (output_df['defteam']!='')
-     ]
-    return output_df
+# Only start and end year, can read from default max range
+def __read_args__():
+
+    parser = argparse.ArgumentParser(description='Read and save data from nfl_data_py requests using input years')
+
+    parser.add_argument('--norm_start_year', type=int, nargs='?', default=1999,
+        help='The starting year for input data (Earliest available data is from 1999)'
+    )
+    parser.add_argument('--norm_end_year', type=int, nargs='?',default=datetime.date.today().year,
+        help='The ending year for input data (Latest is current year)'
+    )
+    parser.add_argument('--input_version', type=str, nargs='?',
+        default=run_raw_nfl_import.__import_version__,
+        help='The version to use for import'
+    )
+    parser.add_argument('--normalization_version', type=str, nargs='?',
+        default=__normalization_version__,
+        help='The version to use for normalization'
+    )
+
+    args = parser.parse_args()
+    inp_args = vars(args)
+
+    inp_args['normalize'] = True
+
+    argument_validation.run_argument_validation(inp_args)
+
+    return inp_args
+
+def __write_normalized_team_data__(input_df,write_dir):
+    os.makedirs(write_dir,exist_ok=True)
+    print("Outputting data to "+write_dir)
+
+    for season in input_df['season'].unique():
+        this_df = input_df.loc[input_df['season']==season].reset_index(drop=True)
+        fn = "weekly_team_data_season_"+str(season)+".pkl"
+        full_output_fn_path = write_dir+fn
+        print("Writing "+fn+" to file")
+        print("Season shape: ",this_df.shape)
+        this_df.to_pickle(full_output_fn_path)
+        print("Wrote "+full_output_fn_path)
+
+def get_normalized_data_path(version=__normalization_version__):
+    return utilities.get_project_dir()+'data/normalized/'+version+'/'
+
 
 
 '''
@@ -38,7 +71,7 @@ def rollup_df(inp_df,key_fields,extra_fields):
 
 
 def load_process_kick_data(raw_input_path,input_year_list):
-    kicking_df = aggregate_read_data_files('kick_points',raw_input_path,input_year_list)
+    kicking_df = utilities.aggregate_read_data_files('kick_points',raw_input_path,input_year_list)
     kicking_df['team'] = kicking_df['posteam']
 
     kicking_df['extra_point_attempt'] = kicking_df['extra_point_attempt'].fillna(0).astype(int)
@@ -95,7 +128,7 @@ def load_process_kick_data(raw_input_path,input_year_list):
 
 
 def load_process_yardage_data(raw_input_path,input_year_list):
-    yardage_df = aggregate_read_data_files('play_yardage',raw_input_path,input_year_list)
+    yardage_df = utilities.aggregate_read_data_files('play_yardage',raw_input_path,input_year_list)
     yardage_df['team'] = yardage_df['posteam']
 
     for yd in [
@@ -127,7 +160,7 @@ def load_process_yardage_data(raw_input_path,input_year_list):
 
 
 def load_process_touchdown_data(raw_input_path,input_year_list):
-    td_df = aggregate_read_data_files('non_kick_points',raw_input_path,input_year_list).drop(
+    td_df = utilities.aggregate_read_data_files('non_kick_points',raw_input_path,input_year_list).drop(
         columns=['defensive_extra_point_attempt', 'defensive_extra_point_conv',]
     )
     td_df['team'] = td_df['td_team']
@@ -147,7 +180,7 @@ def load_process_touchdown_data(raw_input_path,input_year_list):
 
 
 def load_process_turnover_data(raw_input_path,input_year_list):
-    turnover_df = aggregate_read_data_files('turnovers',raw_input_path,input_year_list)
+    turnover_df = utilities.aggregate_read_data_files('turnovers',raw_input_path,input_year_list)
     turnover_df['team'] = turnover_df['posteam']
 
     for t in [
@@ -174,7 +207,7 @@ def load_process_turnover_data(raw_input_path,input_year_list):
 
 
 def load_process_penalty_data(raw_input_path,input_year_list):
-    penalty_df = aggregate_read_data_files('penalties',raw_input_path,input_year_list)
+    penalty_df = utilities.aggregate_read_data_files('penalties',raw_input_path,input_year_list)
     penalty_df['team'] = penalty_df['penalty_team']
 
     for p in [
@@ -186,7 +219,7 @@ def load_process_penalty_data(raw_input_path,input_year_list):
 
 
 def load_process_defense_data(raw_input_path,input_year_list):
-    defense_df = aggregate_read_data_files('defensive',raw_input_path,input_year_list)
+    defense_df = utilities.aggregate_read_data_files('defensive',raw_input_path,input_year_list)
     defense_df['team'] = defense_df['defteam']
 
     for d in [
@@ -198,7 +231,7 @@ def load_process_defense_data(raw_input_path,input_year_list):
 
 
 def load_all_raw_data(raw_input_path,input_year_list,key_fields):
-    
+
     all_pos_def_teams = []
 
     print("Processing kicker data...")
@@ -402,63 +435,28 @@ def team_weekly_rollup( data_dict, key_fields ):
     return full_weekly_team_join
 
 
-def get_normalized_data_path(version=__normalization_version__):
-    return os.getcwd()+'/data/normalized/'+version+'/'
+def normalize(input_arguments):
 
-
-def write_normalized_team_data(input_df,write_dir):
-    os.makedirs(write_dir,exist_ok=True)
-    print("Outputting data to "+write_dir)
-
-    for season in input_df['season'].unique():
-        this_df = input_df.loc[input_df['season']==season].reset_index(drop=True)
-        fn = "weekly_team_data_season_"+str(season)+".pkl"
-        full_output_fn_path = write_dir+fn
-        print("Writing "+fn+" to file")
-        print("Season shape: ",this_df.shape)
-        this_df.to_pickle(full_output_fn_path)
-        print("Wrote "+full_output_fn_path)
-
-# Only start and end year, can read from default max range
-def read_args():
-    
-    parser = argparse.ArgumentParser(description='Read and save data from nfl_data_py requests using input years')
-
-    parser.add_argument('--start_year', type=int, nargs='?', default=1999,
-        help='The starting year for input data (Earliest available data is from 1999)'
+    input_year_list = utilities.gen_year_list(
+        input_arguments['norm_start_year'],
+        input_arguments['norm_end_year']
     )
-    parser.add_argument('--end_year', type=int, nargs='?',default=datetime.date.today().year,
-        help='The ending year for input data (Latest is current year)'
-    )
-
-    args = parser.parse_args()
-    print(args)
-    return vars(args)
-
-def main():
-    input_arguments = read_args()
-
-    #TODO: change project path to be better handled
-    project_path = os.getcwd()+"/"#'/home/sean/Documents/Fantasy_Football/'
-
-    #TODO: properly implement raw versioning here
-    raw_input_path = project_path+'data/raw/0.1.0/'
-
-    assert input_arguments['start_year']>=1999 # Earliest year is 1999
-    assert input_arguments['end_year']<=datetime.date.today().year # Latest year cannot exceed current
-    assert input_arguments['start_year']<=input_arguments['end_year'] # Start year cannot be greater than end year
-
-    input_year_list = [input_arguments['start_year']]
-    for i in range(input_arguments['start_year']+1,input_arguments['end_year']+1):
-        input_year_list.append(i)
 
     # Fields for joining weekly team data on
     key_fields = ['season','week','team']
-        
-    inputs = load_all_raw_data(raw_input_path,input_year_list,key_fields)
-    
+
+    inputs = load_all_raw_data(
+        run_raw_nfl_import.get_raw_data_path(input_arguments['input_version']),
+        input_year_list,
+        key_fields
+    )
+
     team_rollup = team_weekly_rollup( inputs, key_fields )
-    write_normalized_team_data(team_rollup,get_normalized_data_path())
-    
+    __write_normalized_team_data__(
+        team_rollup,
+        get_normalized_data_path(input_arguments['normalization_version'])
+    )
+
 if __name__ == "__main__":
-    main()
+    input_arguments = __read_args__()
+    normalize(input_arguments)

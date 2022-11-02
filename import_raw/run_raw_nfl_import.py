@@ -5,27 +5,65 @@ import datetime
 import argparse
 import os
 import pickle as pkl
+import sys
+
+sys.path.append('/home/sean/Documents/Fantasy_Football/')
+
+from util import utilities
+from util import argument_validation
 
 __import_version__ = '0.1.0'
 
+# Only start and end year, can read from default max range
+def __read_args__():
+
+    parser = argparse.ArgumentParser(description='Read and save data from nfl_data_py requests using input years')
+
+    parser.add_argument('--ingest_start_year', type=int, nargs='?', default=1999,
+        help='The starting year for ingestion data (Earliest available data is from 1999)'
+    )
+    parser.add_argument('--ingest_end_year', type=int, nargs='?',default=datetime.date.today().year,
+        help='The ending year for ingestion data (Latest is current year)'
+    )
+    parser.add_argument('--input_version', type=str, nargs='?',
+        default=__import_version__,
+        help='The version to use for import'
+    )
+
+    args = parser.parse_args()
+    inp_args = vars(args)
+
+    inp_args['ingest'] = True
+
+    argument_validation.run_argument_validation(inp_args)
+
+    return inp_args
+
+def __write_raw_data__(input_dict,write_dir):
+    os.makedirs(write_dir,exist_ok=True)
+    print("Outputting data to "+write_dir)
+
+    for key in input_dict:
+        this_df = input_dict[key]
+        for year in this_df['season'].unique():
+            year_df = this_df.loc[this_df['season']==year]
+            full_output_fn_path = write_dir+key+"_"+str(year)+".pkl"
+            print("Writing "+key+" to file")
+            print(key+" shape: ",year_df.shape)
+            year_df.to_pickle(full_output_fn_path)
+            print("Wrote "+full_output_fn_path)
+
+def get_raw_data_path(version=__import_version__):
+    return os.getcwd()+'/data/raw/'+version+'/'
+
 '''
 Runs the import from nfl_data_py for the given year range
-Generates df of team data aggregated from player weekly stats, 
+Generates df of team data aggregated from player weekly stats,
 as well as play by play information for stats where yardage matters
 
 Returns everything as a dictionary with names/dataframes
 '''
-def run_nfl_import( input_start_year, input_end_year ):
-
-    assert isinstance(input_start_year,int) # Start year must be integer
-    assert isinstance(input_end_year,int) # Start year must be integer
-    assert input_start_year>=1999 # Earliest year is 1999
-    assert input_end_year<=datetime.date.today().year # Latest year cannot exceed current
-    assert input_start_year<=input_end_year # Start year cannot be greater than end year
-
-    input_year_list = [input_start_year]
-    for i in range(input_start_year+1,input_end_year+1):
-        input_year_list.append(i)
+def run_nfl_import( input_year_list ):
 
     print("Considering downloads for years:",input_year_list)
     all_weekly_game_data = nfl.import_weekly_data(
@@ -338,43 +376,15 @@ def run_nfl_import( input_start_year, input_end_year ):
         'defensive':defense_data,
     }
 
-# Only start and end year, can read from default max range
-def read_args():
-    
-    parser = argparse.ArgumentParser(description='Read and save data from nfl_data_py requests using input years')
+def run_save_import(input_arguments):
 
-    parser.add_argument('--start_year', type=int, nargs='?', default=1999,
-        help='The starting year for input data (Earliest available data is from 1999)'
+    input_year_list = utilities.gen_year_list(
+        input_arguments['ingest_start_year'],
+        input_arguments['ingest_end_year']
     )
-    parser.add_argument('--end_year', type=int, nargs='?',default=datetime.date.today().year,
-        help='The ending year for input data (Latest is current year)'
-    )
+    nfl_dfs = run_nfl_import( input_year_list )
+    __write_raw_data__(nfl_dfs,get_raw_data_path(input_arguments['input_version']))
 
-    args = parser.parse_args()
-    print(args)
-    return vars(args)
-
-def get_raw_data_path(version=__import_version__):
-    return os.getcwd()+'/data/raw/'+version+'/'
-
-def write_raw_data(input_dict,write_dir):
-    os.makedirs(write_dir,exist_ok=True)
-    print("Outputting data to "+write_dir)
-
-    for key in input_dict:
-        this_df = input_dict[key]
-        for year in this_df['season'].unique():
-            year_df = this_df.loc[this_df['season']==year]
-            full_output_fn_path = write_dir+key+"_"+str(year)+".pkl"
-            print("Writing "+key+" to file")
-            print(key+" shape: ",year_df.shape)
-            year_df.to_pickle(full_output_fn_path)
-            print("Wrote "+full_output_fn_path)
-    
-def main():
-    input_arguments = read_args()
-    nfl_dfs = run_nfl_import( input_arguments['start_year'], input_arguments['end_year'] )
-    write_raw_data(nfl_dfs,get_raw_data_path())
-    
 if __name__ == "__main__":
-    main()
+    input_arguments = __read_args__()
+    run_save_import(input_arguments)

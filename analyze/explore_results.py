@@ -12,6 +12,8 @@ from sklearn.metrics import r2_score
 plt.style.use('dark_background')
 plt.rcParams['figure.figsize'] = 14,10
 
+__analyze_version__ = '0.1.0'
+
 #TODO: call this from elsewhere
 def aggregate_read_data_files(inp_str,inp_path,inp_year_list):
     file_list=[]

@@ -96,7 +96,7 @@ def run_argument_validation(input_arguments):
             ('prediction_file_name' in input_arguments) and
             (input_arguments['prediction_file_name'] is not None)
         ):
-            fn = get_model_path(
+            fn = model_generation.get_prediction_path(
                 input_arguments['model_version']
             )+input_arguments['prediction_file_name']
         assert (
@@ -108,6 +108,9 @@ def run_argument_validation(input_arguments):
                 os.path.exists(fn)
             )
         ), "If analyze flag set, must either have predict_values set or a valid prediction file!"
+
+        if (input_arguments['top_stats_list'] is None):
+            input_arguments['top_stats_list'] = [1]
 
         for i in range(0,len(input_arguments['top_stats_list'])):
             input_arguments['top_stats_list'][i] = int(input_arguments['top_stats_list'][i])

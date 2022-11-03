@@ -682,8 +682,6 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
 def run_model_gen_prediction(inp_args):
     output_dfs = get_features_values_dict(inp_args)
 
-    print("XXXXXXXXXXXX")
-    
     ml_model_dict = {}
     if (inp_args['input_models_file_name'] is None):
         ml_model_dict = create_model(inp_args,output_dfs)
@@ -692,7 +690,6 @@ def run_model_gen_prediction(inp_args):
         print("Reading "+input_name+"...")
         with open(input_name,'rb') as f:
             ml_model_dict = pkl.load(f)
-        print("Reading "+input_name+"...")
 
     if (inp_args['predict_values']):
         predict(inp_args,output_dfs,ml_model_dict)

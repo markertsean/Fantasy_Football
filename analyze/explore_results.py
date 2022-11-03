@@ -8,23 +8,18 @@ import os
 import pickle as pkl
 from sklearn.metrics import explained_variance_score
 from sklearn.metrics import r2_score
+import sys
 
 plt.style.use('dark_background')
 plt.rcParams['figure.figsize'] = 14,10
 
+#TODO: Proper implementation
+sys.path.append('/home/sean/Documents/Fantasy_Football/')
+from util import utilities
+from model import model_generation
+from normalize import normalize_raw_input
+
 __analyze_version__ = '0.1.0'
-
-#TODO: call this from elsewhere
-def aggregate_read_data_files(inp_str,inp_path,inp_year_list):
-    file_list=[]
-    for fn in os.listdir(inp_path):
-        if (fn.startswith(inp_str)):
-            for year in inp_year_list:
-                if (str(year) in fn):
-                    file_list.append(pd.read_pickle(inp_path+fn))
-    output_df = pd.concat(file_list).sort_values(['season','week','team']).drop_duplicates().reset_index(drop=True)
-    return output_df
-
 
 continuous_offensive_points = {
     'rushing_yards':1/10.,
@@ -84,13 +79,12 @@ def nPk(n, k):
     k=min(k,n-k)
     return math.factorial(n) // math.factorial(n - k)
 
-def load_predictions( input_arguments ):
-    #TODO: change project path to be better handled
-    project_path = os.getcwd()+"/"
+def get_analyze_path(version=__analyze_version__):
+    return utilities.get_project_dir()+'data/analysis/'+version+'/'
 
-    model_input_path = project_path+'/data/model/0.1.0/'
-    
-    full_file_path = model_input_path+input_arguments['input_prediction_file_name']
+def load_predictions( input_arguments ):
+
+    full_file_path = model_generation.get_prediction_path(input_arguments["model_version"])+input_arguments['prediction_file_name']
 
     prediction_dict = {}
     with open(full_file_path,'rb') as f:
@@ -131,20 +125,17 @@ def map_bucket_value(col,inp_df):
         map_dict[val] = sum_val/len(all_numbers)
     return inp_df[col].replace(map_dict)
 
-#TODO: edit so saves plots
 def plot_pred_true(cols,inp_pred_df,inp_true_df,input_args):
-    project_path = os.getcwd()+"/"
-    #TODO: better path handling
-    plot_output_path = project_path+'/data/plots/0.1.0/'
-    os.makedirs(plot_output_path,exist_ok=True)
-    plot_full_fn_pre = plot_output_path+input_args['input_prediction_file_name']
+    plot_output_path = get_analyze_path(input_args["analyze_version"])
+    plot_full_fn_pre = plot_output_path+input_args['prediction_file_name']
+    os.makedirs(plot_full_fn_pre,exist_ok=True)
     
     pred_df = inp_pred_df.copy()
     true_df = inp_true_df.copy()
     if (isinstance(cols,str)):
         cols = [cols]
     for col in cols:
-        plot_full_fn = plot_full_fn_pre + "_" + col + ".png"
+        plot_full_fn = plot_full_fn_pre + "/"+input_args['prediction_file_name']+"_" + col + ".png"
         
         pred_df[col] = map_bucket_value(col,pred_df)
         
@@ -164,6 +155,7 @@ def plot_pred_true(cols,inp_pred_df,inp_true_df,input_args):
         plt.xlabel("Prediction")
         plt.ylabel("Actual")
         plt.savefig(plot_full_fn)
+        print("Wrote "+plot_full_fn)
 
 
 def breakdown_categories(
@@ -288,13 +280,11 @@ def generation_prediction_points(inp_df):
     
     return prediction_df
 
-#TODO: handle pathing better
 def load_true_values_points(year_list,key_fields = ['season','week','team','opponent']):
-    project_path = os.getcwd()+"/"
 
-    actual_data_path = project_path+'/data/normalized/0.1.0/'
+    norm_data_path = normalize_raw_input.get_normalized_data_path()
 
-    true_df = aggregate_read_data_files("weekly_team_data_season",actual_data_path,year_list)
+    true_df = utilities.aggregate_read_data_files("weekly_team_data_season",norm_data_path,year_list)
 
     true_df['receive_touchdown'] = true_df['pass_touchdown']
     true_df['extra_point'] = true_df['extra_point_success']
@@ -369,11 +359,11 @@ def gen_top_team_list(inp_df,inp_cols,n_teams,key_fields=['season','week','team'
     return season_week_col_lookback_team_top_lists
 
 # Only start and end year, can read from default max range
-def read_args():
+def __read_args__():
 
     parser = argparse.ArgumentParser(description='Read and save data from nfl_data_py requests using input years')
 
-    parser.add_argument('--input_prediction_file_name', type=str, required=True,
+    parser.add_argument('--prediction_file_name', type=str, required=True,
         help='Prediction file name to load/use'
     )
 
@@ -381,22 +371,26 @@ def read_args():
         help='Prediction file name to load/use'
     )
 
+    parser.add_argument('--model_version', type=str, nargs='?',
+        default=model_generation.__model_version__,
+        help='The version to use for models'
+    )
+
+
     args = parser.parse_args()
-    print(args)
     
     input_arguments = vars(args)
 
-    for i in range(0,len(input_arguments['top_stats_list'])):
-        input_arguments['top_stats_list'][i] = int(input_arguments['top_stats_list'][i])
-    
+    argument_validation.run_argument_validation(input_arguments)
+
     return input_arguments
 
 
-def main():
-    input_arguments = read_args()
+def analyze(input_arguments):
 
     inp_df = load_predictions(input_arguments)
-    
+
+    print("Loading predictions...")
     prediction_df = generation_prediction_points(inp_df)
 
     key_fields = ['season','week','team','opponent']
@@ -418,6 +412,7 @@ def main():
     
     values_df = prediction_df.rename(columns=rename_cols)[key_fields+values_cols].copy()
     
+    print("Loading true values...")
     
     year_list=[]
     for year in values_df['season'].unique():
@@ -428,10 +423,12 @@ def main():
     true_values_df = true_df[key_fields+values_cols].copy()
 
     points_cols.append('total_points')
-    
+
+    print("Plotting true/pred...")
     plot_pred_true(values_cols,values_df,true_values_df,input_arguments)
     plot_pred_true(points_cols,points_df,true_points_df,input_arguments)
-    
+
+    print("Generating top performing teams...")
     n_lookback = input_arguments['top_stats_list']
     true_top_teams = gen_top_team_list(true_points_df,points_cols,n_lookback)
     pred_top_teams = gen_top_team_list(     points_df,points_cols,n_lookback)
@@ -493,14 +490,13 @@ def main():
             )
     print(output_str)
     
-    project_path = os.getcwd()+"/"
-    #TODO: better path handling
-    txt_output_path = project_path+'/data/plots/0.1.0/'
+    txt_output_path = get_analyze_path()
     os.makedirs(txt_output_path,exist_ok=True)
-    txt_full_fn = txt_output_path+input_arguments['input_prediction_file_name']+"_top_stats.txt"
+    txt_full_fn = txt_output_path+input_arguments['prediction_file_name']+"_top_stats.txt"
     with open(txt_full_fn,'w') as f:
         f.write(output_str)
     
 
 if __name__ == "__main__":
-    main()
+    inp_args = __read_args__()
+    analyze(inp_args)

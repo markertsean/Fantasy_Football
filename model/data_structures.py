@@ -103,7 +103,7 @@ class ModelWrapper:
     ):
         self.x_df = input_x_df.dropna()
         self.y_df = input_y_df.loc[
-            input_y_df.index.intersection(self.x_df.index)]
+            input_y_df.index.intersection(self.x_df.index)
         ].dropna()
         
         assert self.x_df.shape[0]==self.y_df.shape[0] # X and Y must have same dimension

@@ -133,16 +133,24 @@ def main():
     input("Press enter to run the program...")
 
     if (input_args['ingest']):
+        print("Running ingestion job")
         run_raw_nfl_import.run_save_import(input_args)
+        print("Finished ingestion job")
 
     if (input_args['normalize']):
+        print("Running normalization job")
         normalize_raw_input.normalize(input_args)
+        print("Finished normalization job")
 
     if (input_args['generate_model'] or input_args['predict_values']):
+        print("Running model/predict job")
         model_generation.run_model_gen_prediction(input_args)
+        print("Finished model/predict job")
 
     if (input_args['analyze']):
+        print("Running analyze job")
         explore_results.analyze(input_args)
-        
+        print("Finished analyze job")
+
 if __name__ == "__main__":
     main()

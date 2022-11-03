@@ -494,9 +494,6 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         with open(input_name, 'rb') as f:
             scaler = pkl.load(f)
 
-    scaled_joined_df = scale_combine_team_opposition( output_dfs, scaler, key_fields )
-    scaled_features_df = scaled_joined_df.drop(columns=['season','week','team','opponent']).dropna()
-
     #TODO:Consider inplementing Reduce fields
     #TODO:conditional load
     #team_pca = gen_pca_model(
@@ -547,8 +544,8 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         'close_field_goal_attempts':[0,1,2,3,4],
         'far_field_goal_attempts':[0,1,2,3],
         'sack':[0,2,4,6,8],
-        'fumble':[0,2,4,6],
-        'offensive_interception':[0,2,4],
+        'fumble':[0,1,2,3],
+        'offensive_interception':[0,1,2,3],
         'defensive_points_allowed':[0,1,7,14,21,28,35],
         'defensive_fumble_forced':[0,2,4],
         'defensive_interception':[0,2,4],
@@ -558,6 +555,8 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     team_fields         = output_dfs['team_fields']
     opposing_fields     = output_dfs['opposing_fields']
 
+    scaled_joined_df_pre = scale_combine_team_opposition( output_dfs, scaler, key_fields )
+    scaled_joined_df    = utilities.filter_df_year( scaled_joined_df_pre     , input_arguments['process_start_year'], input_arguments['process_end_year'] )
     values_df           = utilities.filter_df_year( output_dfs['value_df']   , input_arguments['process_start_year'], input_arguments['process_end_year'] )
     team_rolling_df     = utilities.filter_df_year( output_dfs['team_df']    , input_arguments['process_start_year'], input_arguments['process_end_year'] )
     opposing_rolling_df = utilities.filter_df_year( output_dfs['opposing_df'], input_arguments['process_start_year'], input_arguments['process_end_year'] )
@@ -628,7 +627,6 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
 def predict(input_arguments,output_dfs,combined_models,key_fields=['season','week','team','opponent']):
 
     scaled_joined_df = scale_combine_team_opposition( output_dfs, combined_models['scaler'], key_fields )
-    scaled_features_df = scaled_joined_df.drop(columns=['season','week','team','opponent']).dropna()
 
     team_fields         = output_dfs['team_fields']
     opposing_fields     = output_dfs['opposing_fields']
@@ -643,7 +641,6 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
         on=key_fields
     )
 
-
     scaled_joined_out_df = utilities.filter_df_year(
         scaled_joined_df,
         input_arguments['predict_start_year'],
@@ -654,13 +651,13 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
         joined_df,
         input_arguments['predict_start_year'],
         input_arguments['predict_end_year']
-    ).dropna().iloc[scaled_joined_out_df.index]
+    )
 
     values_out_df = utilities.filter_df_year(
         values_df,
         input_arguments['predict_start_year'],
         input_arguments['predict_end_year']
-    ).dropna().iloc[scaled_joined_out_df.index]
+    )
 
     output_dict = {
         'propogate_df':values_out_df[key_fields+combined_models['propogate_cols']],

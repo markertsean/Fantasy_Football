@@ -10,7 +10,7 @@ import pandas as pd
 import argparse
 import datetime
 import os
-
+import pickle as pkl
 
 def read_args():
     
@@ -137,6 +137,9 @@ def main():
 
     if (input_args['normalize']):
         normalize_raw_input.normalize(input_args)
-    
+
+    if (input_args['generate_model'] or input_args['predict_values']):
+        model_generation.run_model_gen_prediction(input_args)
+
 if __name__ == "__main__":
     main()

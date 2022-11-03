@@ -27,7 +27,7 @@ sys.path.append('/home/sean/Documents/Fantasy_Football/')
 from normalize import normalize_raw_input
 from util import utilities
 from util import argument_validation
-from data_structures import ZScaler,PCACols,ModelWrapper
+from model.data_structures import ZScaler,PCACols,ModelWrapper
 
 
 __model_version__='0.1.0'
@@ -679,17 +679,24 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
     print("Wrote "+output_name)
 
 
-if __name__ == "__main__":
-    inp_args = __read_args__()
+def run_model_gen_prediction(inp_args):
     output_dfs = get_features_values_dict(inp_args)
 
+    print("XXXXXXXXXXXX")
+    
     ml_model_dict = {}
     if (inp_args['input_models_file_name'] is None):
         ml_model_dict = create_model(inp_args,output_dfs)
     else:
         input_name = get_model_path()+inp_args['input_models_file_name']
+        print("Reading "+input_name+"...")
         with open(input_name,'rb') as f:
             ml_model_dict = pkl.load(f)
+        print("Reading "+input_name+"...")
 
     if (inp_args['predict_values']):
         predict(inp_args,output_dfs,ml_model_dict)
+    
+if __name__ == "__main__":
+    inp_args = __read_args__()
+    run_model_gen_prediction(inp_args)

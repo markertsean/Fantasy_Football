@@ -170,7 +170,6 @@ def map_bucket_value(col,inp_df):
     if (not run_map):
         return inp_df[col]
     map_dict = {}
-    print(inp_df[col].unique())
     for val in inp_df[col].unique():
         all_numbers_dash = [int(s) for s in val.split('-') if s.isdigit()]
         all_numbers_plus = [int(s) for s in val.split('+') if s.isdigit()]
@@ -180,7 +179,6 @@ def map_bucket_value(col,inp_df):
         for i in range(0,len(all_numbers)):
             sum_val += all_numbers[i]*1.0
         map_dict[val] = sum_val/len(all_numbers)
-    print(inp_df[col].replace(map_dict).unique())
     return inp_df[col].replace(map_dict)
 
 def plot_pred_true(cols,inp_pred_df,inp_true_df,input_args):

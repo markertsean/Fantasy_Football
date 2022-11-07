@@ -141,6 +141,7 @@ class ModelWrapper:
         n_jobs=1,
         scoring=None,
         cv=3,
+        balance_sample=None,
     ):
         if isinstance(names,str):
             names=[names]
@@ -152,8 +153,27 @@ class ModelWrapper:
             if (use_cols is None):
                 use_cols = self.x_df.drop(columns=self.key_fields).columns.values
             self.col_dict[name] = use_cols
-            features = self.__get_values__(self.x_df,self.col_dict[name])
-            values   = self.__get_values__(self.y_df,name)
+
+            x_df = self.x_df
+            y_df = self.y_df
+            if (balance_sample is not None):
+                assert isinstance(balance_sample,float), "balance_sample must be float"
+
+                y_case_df     = self.y_df.loc[self.y_df[name]==1]
+                y_non_case_df = self.y_df.loc[self.y_df[name]==0]
+
+                if ( y_case_df.shape[0] < y_non_case_df.shape[0] ):
+                    y_non_case_df = y_non_case_df.sample(int(balance_sample*y_case_df.shape[0]))
+                elif ( y_case_df.shape[0] > y_non_case_df.shape[0] ):
+                    y_case_df = y_case_df.sample(int(balance_sample*y_non_case_df.shape[0]))
+
+                concat_df = pd.concat([y_case_df,y_non_case_df])
+                valid_indexes = concat_df.index
+                x_df = self.x_df.loc[valid_indexes]
+                y_df = self.y_df.loc[valid_indexes]
+
+            features = self.__get_values__(x_df,use_cols)
+            values   = self.__get_values__(y_df,name)
 
             x_shuf, y_shuf = shuffle( features, values )
             x_train, x_test, y_train, y_test = train_test_split( x_shuf, y_shuf, test_size=test_size )
@@ -164,10 +184,12 @@ class ModelWrapper:
                 gscv = GridSearchCV( model, parameters, n_jobs=n_jobs, scoring=scoring,cv=cv )
                 gscv.fit(x_train, y_train)
                 self.cv_dict[name] = gscv
-                print(gscv.best_params_)
                 self.model_dict[name] = gscv.best_estimator_.fit(x_train,y_train)
 
             print("Fit model for "+name+", test data score=",str(self.model_dict[name].score(x_test,y_test)))
+
+            if (parameters is not None):
+                print(gscv.best_params_)
 
     def predict(self,name,inp_df):
         assert isinstance(name,str)

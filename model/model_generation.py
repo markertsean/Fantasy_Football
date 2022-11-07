@@ -377,6 +377,7 @@ def generate_models_from_list(
         test_size=0.20,
         n_jobs=1,
         cv=3,
+        balance_sample=None
 ):
     assert ((feature_df is not None) and (value_df is not None)) or ( reuse_model_wrapper is not None )
 
@@ -439,7 +440,8 @@ def generate_models_from_list(
             scoring=scoring_list[i],
             test_size=test_size,
             n_jobs=n_jobs,
-            cv=cv
+            cv=cv,
+            balance_sample=balance_sample,
         )
     return my_models
 
@@ -703,6 +705,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         test_size=0.20,
         n_jobs=4,
         cv=3,
+        balance_sample=1.2,
     )
 
     combined_models = {

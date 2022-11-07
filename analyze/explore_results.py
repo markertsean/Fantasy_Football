@@ -8,6 +8,7 @@ import os
 import pickle as pkl
 from sklearn.metrics import explained_variance_score
 from sklearn.metrics import r2_score
+from sklearn.metrics import confusion_matrix
 import sys
 
 plt.style.use('dark_background')
@@ -79,6 +80,61 @@ def nPk(n, k):
     k=min(k,n-k)
     return math.factorial(n) // math.factorial(n - k)
 
+class range_class:
+    def __init__(self):
+        self.my_range = {}
+
+    def get_first_digit(self,inp_str):
+        start_ind=0
+        for i in range(start_ind,len(inp_str)):
+            start_ind = i
+            if (inp_str[i].isdigit()):
+                break
+        end_ind = start_ind+1
+        for i in range(end_ind,len(inp_str)):
+            end_ind = i
+            if (not inp_str[i].isdigit()):
+                break
+        return inp_str[start_ind:end_ind]
+
+    def add_range(self,inp_str):
+        first_number = self.get_first_digit(inp_str)
+        if (inp_str[0] == '_'):
+            self.my_range[int(first_number)] = inp_str[1:]
+        elif (inp_str[-1] == '_'):
+            self.my_range[int(first_number)] = inp_str[:-1]+"+"
+        else:
+            self.my_range[int(first_number)] = inp_str.replace('_','-')
+
+    def get_range(self,inp_digit):
+        this_digit = int(inp_digit)
+        for digit in (sorted(self.my_range.keys()))[::-1]:
+            if (this_digit>= digit):
+                return self.my_range[digit]
+        return None
+
+    def get_range_dict(self):
+        return self.my_range
+
+def get_ranges(columns):
+    cols_to_gen = []
+    out_dict = {}
+    for cat in [
+        categorical_offensive_points,
+        defensive_points,
+    ]:
+        for key in cat.keys():
+            cols_to_gen.append(key)
+            out_dict[cols_to_gen[-1]] = range_class()
+
+    for col in columns:
+        for good_col in cols_to_gen:
+            if ((col.startswith(good_col)) and ("_range_" in col)):
+                start_ind = col.index('_range_')+7
+                out_dict[good_col].add_range(col[start_ind:])
+
+    return out_dict
+
 def get_analyze_path(version=__analyze_version__):
     return utilities.get_project_dir()+'data/analysis/'+version+'/'
 
@@ -89,9 +145,9 @@ def load_predictions( input_arguments ):
     prediction_dict = {}
     with open(full_file_path,'rb') as f:
         prediction_dict = pkl.load(f)
-    
+
     inp_df = prediction_dict['propogate_df']
-    
+
     for key in prediction_dict:
         if (key!='propogate_df'):
             if (len(prediction_dict[key].shape)==1):
@@ -104,7 +160,7 @@ def load_predictions( input_arguments ):
 # Makes ranges from categories readable
 def map_bucket_value(col,inp_df):
     run_map = False
-    
+
     for val in inp_df[col].unique():
         try:
             int(val)
@@ -114,6 +170,7 @@ def map_bucket_value(col,inp_df):
     if (not run_map):
         return inp_df[col]
     map_dict = {}
+    print(inp_df[col].unique())
     for val in inp_df[col].unique():
         all_numbers_dash = [int(s) for s in val.split('-') if s.isdigit()]
         all_numbers_plus = [int(s) for s in val.split('+') if s.isdigit()]
@@ -123,24 +180,33 @@ def map_bucket_value(col,inp_df):
         for i in range(0,len(all_numbers)):
             sum_val += all_numbers[i]*1.0
         map_dict[val] = sum_val/len(all_numbers)
+    print(inp_df[col].replace(map_dict).unique())
     return inp_df[col].replace(map_dict)
 
 def plot_pred_true(cols,inp_pred_df,inp_true_df,input_args):
     plot_output_path = get_analyze_path(input_args["analyze_version"])
-    plot_full_fn_pre = plot_output_path+input_args['prediction_file_name']
+    plot_full_fn_pre = plot_output_path+input_args['prediction_file_name'] + "/scatter/"
     os.makedirs(plot_full_fn_pre,exist_ok=True)
-    
+
     pred_df = inp_pred_df.copy()
     true_df = inp_true_df.copy()
     if (isinstance(cols,str)):
         cols = [cols]
     for col in cols:
-        plot_full_fn = plot_full_fn_pre + "/"+input_args['prediction_file_name']+"_" + col + ".png"
-        
+        plot_full_fn = plot_full_fn_pre + input_args['prediction_file_name']+"_" + col + ".png"
+
         pred_df[col] = map_bucket_value(col,pred_df)
-        
-        min_value = 1.1*min(pred_df[col].astype(int).min(),true_df[col].astype(int).min())
-        max_value = 1.1*max(pred_df[col].astype(int).max(),true_df[col].astype(int).max())
+
+        min_value = min(pred_df[col].astype(int).min(),true_df[col].astype(int).min())
+        max_value = max(pred_df[col].astype(int).max(),true_df[col].astype(int).max())
+
+        min_value = 0.9*min_value if min_value > 0 else (
+            -1 if min_value == 0 else 1.1*min_value
+        )
+        max_value = 1.1*max_value if max_value > 0 else (
+            1 if max_value == 0 else 0.9*max_value
+        )
+
         plt.clf()
         plt.scatter(pred_df[col],true_df[col],color='r',alpha=0.05)
         plt.plot([min_value,max_value],[min_value,max_value],linestyle='--',color='b')
@@ -157,6 +223,92 @@ def plot_pred_true(cols,inp_pred_df,inp_true_df,input_args):
         plt.savefig(plot_full_fn)
         print("Wrote "+plot_full_fn)
 
+from sklearn.metrics import plot_confusion_matrix
+
+def plot_confusion(cols,inp_pred_df,inp_true_df,input_args):
+    plot_output_path = get_analyze_path(input_args["analyze_version"])
+    plot_full_fn_pre = plot_output_path+input_args['prediction_file_name'] + "/confusion/"
+    os.makedirs(plot_full_fn_pre,exist_ok=True)
+
+    pred_df = inp_pred_df.copy()
+    true_df = inp_true_df.copy()
+    key_fields = ['season','week','team','opponent']
+    if (isinstance(cols,str)):
+        cols = [cols]
+    for col in cols:
+        plot_full_fn = plot_full_fn_pre + "/"+input_args['prediction_file_name']+"_" + col + ".png"
+
+        if (pred_df[col].unique().shape[0] > 20):
+            continue
+
+        true_count = {}
+        true_bins = sorted(true_df[col].unique())
+        for t in true_bins:
+            true_count[t] = true_df.loc[true_df[col]==t,col].shape[0]
+
+        pred_count = {}
+        pred_bins = sorted(pred_df[col].unique())
+        for p in pred_bins:
+            pred_count[p] = pred_df.loc[pred_df[col]==p,col].shape[0]
+
+        all_bins = true_bins
+
+        comb_df = true_df[key_fields+[col]].rename(
+            columns={col:col+"_true"}
+        ).merge( pred_df[key_fields+[col]].rename(
+            columns={col:col+"_pred"}
+        ),
+            on=key_fields
+        )
+
+        conf = {}
+        for t in all_bins:
+            conf[t] = {}
+            for p in all_bins:
+                conf[t][p] = comb_df.loc[
+                    (comb_df[col+"_true"]==t) &
+                    (comb_df[col+"_pred"]==p)
+                ].shape[0]
+
+        inp_array = np.zeros([len(all_bins),len(all_bins)])
+        tp = 0.0
+        tn = 0.0
+        fp = 0.0
+        fn = 0.0
+        for i_t in range(0,len(all_bins)):
+            for i_p in range(0,len(all_bins)):
+                inp_array[i_t,i_p] = conf[all_bins[i_t]][all_bins[i_p]]
+
+                if (i_t == i_p):
+                    tp += inp_array[i_t,i_p]
+                else:
+                    tn += inp_array[i_t,i_p]
+
+        for i in range(0,len(all_bins)):
+            fn += inp_array[i,:].sum() - inp_array[i,i]
+            fp += inp_array[:,i].sum() - inp_array[i,i]
+
+        micro_precision = tp / (tp+fp)
+        micro_recall = tp / (tp+fn)
+
+        all_bins = [ str(s) for s in all_bins ]
+
+        df_cm = pd.DataFrame(
+            inp_array,
+            index = all_bins,
+            columns = all_bins
+        )
+
+        plt.clf()
+        sns.heatmap(df_cm, annot=True,fmt='g')
+        plt.xlabel("Prediction")
+        plt.ylabel("Actual")
+        plt.title("{:s}:    Micro Precision={:8.4f}".format(
+            col,
+            micro_precision,
+        ))
+        plt.savefig(plot_full_fn)
+        print("Wrote "+plot_full_fn)
 
 def breakdown_categories(
     inp_df,
@@ -166,9 +318,9 @@ def breakdown_categories(
 ):
     if (isinstance(fields_to_parse,str)):
         fields_to_parse = [fields_to_parse]
-        
+
     out_df = inp_df.copy()
-        
+
     for field_pattern in fields_to_parse:
         valid_fields = []
         for key in out_df.columns:
@@ -210,7 +362,7 @@ def breakdown_categories(
             out_df = out_df.drop(columns=['best_field'])
             if drop_cols:
                 out_df = out_df.drop(columns=valid_fields)
-        
+
     return out_df
 
 
@@ -222,7 +374,7 @@ def generation_prediction_points(inp_df):
         'far_field_goal_attempts',
         'touchdown',
     ])
-    
+
     for key in continuous_offensive_points:
         if (key in prediction_df.columns.values):
             prediction_df[key+'_points'] = (prediction_df[key].apply(lambda x: x*all_points_dict[key])).astype(int)
@@ -238,36 +390,36 @@ def generation_prediction_points(inp_df):
             if ( (point_col in all_points_dict) and (point_col != 'defensive_points_allowed') ):
                 prediction_df[col+'_points'] = (prediction_df[col].apply(lambda x: x*all_points_dict[point_col])).astype(int)
 
-    prediction_df['receive_touchdown'] = prediction_df['pass_touchdown']
+    prediction_df['receive_touchdown'] = prediction_df['pass_touchdown_predicted']
     prediction_df['receive_touchdown_points'] = (
         prediction_df['receive_touchdown'].astype(float) * all_points_dict['receive_touchdown']
     ).astype(int)
 
-    prediction_df['extra_point'] = prediction_df['pass_touchdown'] + prediction_df['rush_touchdown']
+    prediction_df['extra_point'] = prediction_df['pass_touchdown_predicted'] + prediction_df['rush_touchdown_predicted']
     prediction_df['extra_point_points'] = (prediction_df['extra_point'] * kicker_points['extra_point']).astype(int)
 
-    
+
     prediction_df['close_field_goal_success'] = (
-        prediction_df['close_field_goal_attempts'].astype(float) * prediction_df['close_field_goal_success_rate']
+        prediction_df['close_field_goal_attempts_predicted'].astype(float) * prediction_df['close_field_goal_success_rate']
     ).astype(int)
     prediction_df['close_field_goal_success_points'] = (
         prediction_df['close_field_goal_success'] * all_points_dict['close_field_goal_success']
     ).astype(int)
     prediction_df['close_field_goal_failure'] = (
-        prediction_df['close_field_goal_attempts'].astype(float) * (1.-prediction_df['close_field_goal_success_rate'])
+        prediction_df['close_field_goal_attempts_predicted'].astype(float) * (1.-prediction_df['close_field_goal_success_rate'])
     ).astype(int)
     prediction_df['close_field_goal_failure_points'] = (
         prediction_df['close_field_goal_failure'] * all_points_dict['close_field_goal_failure']
     ).astype(int)
 
     prediction_df['far_field_goal_success'] = (
-        prediction_df['far_field_goal_attempts'].astype(float) * prediction_df['far_field_goal_success_rate']
+        prediction_df['far_field_goal_attempts_predicted'].astype(float) * prediction_df['far_field_goal_success_rate']
     ).astype(int)
     prediction_df['far_field_goal_success_points'] = (
         prediction_df['far_field_goal_success'] * all_points_dict['far_field_goal_success']
     ).astype(int)
     prediction_df['far_field_goal_failure'] = (
-        prediction_df['far_field_goal_attempts'].astype(float) * (1.-prediction_df['far_field_goal_success_rate'])
+        prediction_df['far_field_goal_attempts_predicted'].astype(float) * (1.-prediction_df['far_field_goal_success_rate'])
     ).astype(int)
     prediction_df['far_field_goal_failure_points'] = (
         prediction_df['far_field_goal_failure'] * all_points_dict['far_field_goal_failure']
@@ -277,7 +429,7 @@ def generation_prediction_points(inp_df):
     prediction_df['defensive_points_allowed_points'] = prediction_df['defensive_points_allowed_predicted'].apply(
         lambda x: defensive_points_allowed(x)
     )
-    
+
     return prediction_df
 
 def load_true_values_points(year_list,key_fields = ['season','week','team','opponent']):
@@ -315,7 +467,7 @@ def load_true_values_points(year_list,key_fields = ['season','week','team','oppo
     true_df['defensive_points_allowed_points'] = true_df['defensive_points_allowed'].apply(
         lambda x: defensive_points_allowed(int(x))
     )
-    
+
     return true_df
 
 
@@ -324,7 +476,7 @@ def gen_top_team_list(inp_df,inp_cols,n_teams,key_fields=['season','week','team'
         inp_cols = [inp_cols]
     if isinstance(n_teams,int):
         n_teams = [n_teams]
-        
+
     lookback_list = n_teams
     season_week_col_lookback_team_top_lists = {}
     for season in inp_df['season'].unique():
@@ -378,7 +530,7 @@ def __read_args__():
 
 
     args = parser.parse_args()
-    
+
     input_arguments = vars(args)
 
     argument_validation.run_argument_validation(input_arguments)
@@ -394,7 +546,7 @@ def analyze(input_arguments):
     prediction_df = generation_prediction_points(inp_df)
 
     key_fields = ['season','week','team','opponent']
-    
+
     points_cols = []
     values_cols = []
     rename_cols = {}
@@ -406,14 +558,14 @@ def analyze(input_arguments):
                 values_cols.append('defensive_points_allowed')
             else:
                 values_cols.append(col.replace('_predicted','').replace('_points',''))
-                
+
     points_df = prediction_df.rename(columns=rename_cols)[key_fields+points_cols].copy()
     points_df['total_points'] = points_df[points_cols].sum(axis=1)
-    
+
     values_df = prediction_df.rename(columns=rename_cols)[key_fields+values_cols].copy()
-    
+
     print("Loading true values...")
-    
+
     year_list=[]
     for year in values_df['season'].unique():
         year_list.append(year)
@@ -428,11 +580,26 @@ def analyze(input_arguments):
     plot_pred_true(values_cols,values_df,true_values_df,input_arguments)
     plot_pred_true(points_cols,points_df,true_points_df,input_arguments)
 
+    range_mapping_dict = get_ranges(inp_df.columns)
+    true_values_df_range_replaced = true_values_df.copy()
+    for cat in [
+            categorical_offensive_points,
+            defensive_points,
+    ]:
+        for key in cat.keys():
+            if (key in range_mapping_dict) and (key in true_values_df_range_replaced.columns ):
+                true_values_df_range_replaced[key] = true_values_df_range_replaced[key].apply(
+                    lambda x: range_mapping_dict[key].get_range(x)
+                )
+
+    plot_confusion(values_cols,values_df,true_values_df_range_replaced,input_arguments)
+
+
     print("Generating top performing teams...")
     n_lookback = input_arguments['top_stats_list']
     true_top_teams = gen_top_team_list(true_points_df,points_cols,n_lookback)
     pred_top_teams = gen_top_team_list(     points_df,points_cols,n_lookback)
-    
+
     n_teams = true_points_df['team'].unique().shape[0]
     output_str = "Random guessing: \n"
     output_str+= "\tGet top: {:5.2f}%\n".format(1*100.0/true_points_df['team'].unique().shape[0])
@@ -470,7 +637,7 @@ def analyze(input_arguments):
                     for i in range(0,len(true_list)):
                         if (true_list[i] in pred_list):
                             n_true_match += 1.0
-                    
+
             many_warning = "\n"
             if (many_at_top):
                 many_warning = "    Warning: Field trends to low values\n"
@@ -489,13 +656,13 @@ def analyze(input_arguments):
                 many_warning
             )
     print(output_str)
-    
+
     txt_output_path = get_analyze_path()
     os.makedirs(txt_output_path,exist_ok=True)
     txt_full_fn = txt_output_path+input_arguments['prediction_file_name']+"_top_stats.txt"
     with open(txt_full_fn,'w') as f:
         f.write(output_str)
-    
+
 
 if __name__ == "__main__":
     inp_args = __read_args__()

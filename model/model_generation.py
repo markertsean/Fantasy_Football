@@ -182,22 +182,37 @@ def generate_weekly_team_features_values( inp_df, key_fields, n_rolling ):
     weekly_df['extra_point_success_rate'] = weekly_df['extra_point_success'] / (
         weekly_df['extra_point_attempt']+1e-7
     )
+
+    weekly_df['close_field_goal_success'] = weekly_df['kick_distance_0_39_success']
+    weekly_df['close_field_goal_fail'] = weekly_df['kick_distance_0_39_fail']
     weekly_df['close_field_goal_attempts'] = (
-        weekly_df['kick_distance_0_39_success'] + weekly_df['kick_distance_0_39_fail']
+        weekly_df['close_field_goal_success'] + weekly_df['close_field_goal_fail']
     )
-    weekly_df['close_field_goal_success_rate'] = weekly_df['kick_distance_0_39_success'] / (
+    weekly_df['close_field_goal_success_rate'] = weekly_df['close_field_goal_success'] / (
         weekly_df['close_field_goal_attempts'] + 1e-7
     )
 
-    weekly_df['kick_distance_40_success'] = weekly_df['kick_distance_40_49_success'] + weekly_df['kick_distance_50_success']
-    weekly_df['kick_distance_40_fail'] = weekly_df['kick_distance_40_49_fail'] + weekly_df['kick_distance_50_fail']
-
+    weekly_df['far_field_goal_success'] = weekly_df['kick_distance_40_49_success'] + weekly_df['kick_distance_50_success']
+    weekly_df['far_field_goal_fail'] = weekly_df['kick_distance_40_49_fail'] + weekly_df['kick_distance_50_fail']
     weekly_df['far_field_goal_attempts'] = (
-        weekly_df['kick_distance_40_success'] + weekly_df['kick_distance_40_fail']
+        weekly_df['far_field_goal_success'] + weekly_df['far_field_goal_fail']
     )
-    weekly_df['far_field_goal_success_rate'] = weekly_df['kick_distance_40_success'] / (
+    weekly_df['far_field_goal_success_rate'] = weekly_df['far_field_goal_success'] / (
         weekly_df['far_field_goal_attempts'] + 1e-7
     )
+
+    # Zero attempts for field goals don't leave much to interpret
+    for col_pre in ['close_field_goal','far_field_goal']:
+        col = col_pre + '_success_rate'
+        weekly_df['old_'+col] = weekly_df[col]
+        for team in weekly_df['team'].unique():
+            team_df = weekly_df.loc[weekly_df['team']==team].sort_values(['season','week'])
+            prev_rate = team_df[col_pre+'_success'].sum()/team_df[col_pre+'_attempts'].sum()
+            for idx,row in team_df.iterrows():
+                if ( row[col_pre+'_attempts']<1 ):
+                    weekly_df.loc[idx,col] = prev_rate
+                else:
+                    prev_rate = row[col]
 
     weekly_df['pass_play_rate'] = weekly_df['pass_attempt'] / (
         weekly_df['pass_attempt'] + weekly_df['rush_attempt'] + 1e-7
@@ -526,7 +541,8 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     ]
 
     continuous_values_cols = [
-        'rushing_yards', 'receiving_yards',
+        #'rushing_yards', 'receiving_yards',
+        'rushing_yards', 'receiving_yards', 'complete_pass',
     ]
 
     propogate_cols = [
@@ -536,19 +552,19 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     ]
 
     class_values_ranges = {
-        'complete_pass':[0,10,15,20,25,30,35],
+        #'complete_pass':[0,10,15,20,25,30,35],
         'touchdown':[0,1,2,3,4,5],
-        'pass_touchdown':[0,1,2,3,4],
-        'rush_touchdown':[0,1,2,3,4],
-        'td_yards_40':[0,1,2],
+        'pass_touchdown':[0,1,2,3],
+        'rush_touchdown':[0,1,2,3],
+        'td_yards_40':[0,1],
         'close_field_goal_attempts':[0,1,2,3,4],
         'far_field_goal_attempts':[0,1,2,3],
-        'sack':[0,2,4,6,8],
-        'fumble':[0,1,2,3],
-        'offensive_interception':[0,1,2,3],
+        'sack':[0,2,4,6],
+        'fumble':[0,1,2],
+        'offensive_interception':[0,1,2],
         'defensive_points_allowed':[0,1,7,14,21,28,35],
         'defensive_fumble_forced':[0,2,4],
-        'defensive_interception':[0,2,4],
+        'defensive_interception':[0,1,2],
     }
 
 
@@ -565,6 +581,93 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         opposing_rolling_df[key_fields+opposing_fields],
         on=key_fields
     )
+
+    # For NN models
+    n_features = len(team_fields)
+    n_   = n_features
+    n_23 = int(n_features*2./3)
+    n_2  = int(n_features/2.)
+    n_3  = int(n_features/3.)
+
+    regressor_model_dict = {
+        'LinearRegression': LinearRegression(),
+        'RandomForestRegressor':RandomForestRegressor(),
+        'MLPRegressor':MLPRegressor(
+            activation='identity', # This is consistently best
+            solver='adam',
+            max_iter=1000,
+        ),
+    }
+
+    regressor_cv_param_dict = {
+        'LinearRegression':{
+            'fit_intercept':[True,False],
+        },
+        'RandomForestRegressor':{
+            'n_estimators':[300,500,700],
+            #'max_depth':[None,10,15],
+            #'max_features':[None,'sqrt'],
+            #'min_samples_leaf':[1,0.1,0.05,0.01],
+        },
+        'MLPRegressor':{
+            'hidden_layer_sizes': [
+                (n_  ,),
+                (n_23,),
+                (n_2 ,),
+                (n_3 ,),
+                (n_  , n_23,),
+                (n_23, n_2 ,),
+                (n_2 , n_3 ,),
+                (n_23, n_  ,),
+                (n_2 , n_23,),
+                (n_3 , n_2 ,),
+            ],
+        },
+    }
+
+    classifier_model_dict = {
+        'LogisticRegression': LogisticRegression(),
+        'RandomForestClassifier':RandomForestClassifier(),
+        'MLPClassifier':MLPClassifier(
+            activation='identity', # This is consistently best
+            solver='adam',
+            max_iter=1000,
+        ),
+    }
+
+    classifier_cv_param_dict = {
+        'LogisticRegression':{
+            'fit_intercept':[True,False],
+            'C':[1e-3,5e-3,1e-2,5e-2,1e-1,5e-1,1e0,5e0,1e1,5e1]
+        },
+        'RandomForestClassifier':{
+            'n_estimators':[300,500,700],
+            #'max_depth':[None,10,15],
+            #'max_features':[None,'sqrt'],
+            #'min_samples_leaf':[1,0.1,0.05,0.01],
+        },
+        'MLPClassifier':{
+            'hidden_layer_sizes': [
+                (n_  ,),
+                (n_23,),
+                (n_2 ,),
+                (n_3 ,),
+                (n_  , n_23,),
+                (n_23, n_2 ,),
+                (n_2 , n_3 ,),
+                (n_23, n_  ,),
+                (n_2 , n_23,),
+                (n_3 , n_2 ,),
+            ],
+        },
+    }
+
+
+    ################TODO: make this a flag!!!
+    this_reg_model = regressor_model_dict    ['MLPRegressor']
+    this_reg_param = regressor_cv_param_dict ['MLPRegressor']
+    this_clf_model = classifier_model_dict   ['MLPClassifier']
+    this_clf_param = classifier_cv_param_dict['MLPClassifier']
 
     class_cols = {}
     class_values_list = []
@@ -583,9 +686,10 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         fields_to_model=continuous_values_cols,
         feature_df = joined_df,
         value_df = values_df,
-        model = LinearRegression(),
+        model = this_reg_model,
+        cv_parameters = this_reg_param,
         test_size=0.20,
-        n_jobs=8,
+        n_jobs=4,
         cv=3,
     )
     print(reg_models.model(continuous_values_cols[0]))
@@ -594,9 +698,10 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         fields_to_model=class_values_list,
         feature_df = scaled_joined_df,
         value_df = values_df,
-        model = LogisticRegression(),
+        model = this_clf_model,
+        cv_parameters = this_clf_param,
         test_size=0.20,
-        n_jobs=8,
+        n_jobs=4,
         cv=3,
     )
 
@@ -690,7 +795,7 @@ def run_model_gen_prediction(inp_args):
 
     if (inp_args['predict_values']):
         predict(inp_args,output_dfs,ml_model_dict)
-    
+
 if __name__ == "__main__":
     inp_args = __read_args__()
     run_model_gen_prediction(inp_args)

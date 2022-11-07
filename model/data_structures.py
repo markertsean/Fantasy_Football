@@ -105,7 +105,7 @@ class ModelWrapper:
         self.y_df = input_y_df.loc[
             input_y_df.index.intersection(self.x_df.index)
         ].dropna()
-        
+
         assert self.x_df.shape[0]==self.y_df.shape[0] # X and Y must have same dimension
         self.key_fields = key_fields
         self.model_dict = {}
@@ -164,6 +164,7 @@ class ModelWrapper:
                 gscv = GridSearchCV( model, parameters, n_jobs=n_jobs, scoring=scoring,cv=cv )
                 gscv.fit(x_train, y_train)
                 self.cv_dict[name] = gscv
+                print(gscv.best_params_)
                 self.model_dict[name] = gscv.best_estimator_.fit(x_train,y_train)
 
             print("Fit model for "+name+", test data score=",str(self.model_dict[name].score(x_test,y_test)))

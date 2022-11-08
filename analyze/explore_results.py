@@ -656,7 +656,7 @@ def analyze(input_arguments):
             )
     print(output_str)
 
-    txt_output_path = get_analyze_path()
+    txt_output_path = get_analyze_path(input_args["analyze_version"]) + +input_args['prediction_file_name']
     os.makedirs(txt_output_path,exist_ok=True)
     txt_full_fn = txt_output_path+input_arguments['prediction_file_name']+"_top_stats.txt"
     with open(txt_full_fn,'w') as f:

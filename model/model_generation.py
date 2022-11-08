@@ -16,6 +16,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 
+from sklearn.multioutput import MultiOutputClassifier
+
 import pickle as pkl
 import numpy as np
 import pandas as pd
@@ -85,7 +87,7 @@ def __read_args__():
         default='Logistic',
         help='The ML model to use for classification [Logistic,SVM,Forest,MLP]'
     )
-    
+
     parser.add_argument('--output_scaler_file_name', type=str, nargs='?',
         help='Optional scaler file to save, otherwise uses date'
     )
@@ -140,28 +142,24 @@ def gen_field_ranges( inp_df, col, range_starts ):
     assert isinstance(range_starts,list) # Need a list input
     assert len(range_starts)>1 # Only operate when there are a number of values
 
-    out_df = inp_df.copy()
+    out_dict = {}
 
     for i in range(0,len(range_starts)-1):
         start = range_starts[i]
         end   = range_starts[i+1] - 1
+        val   = ""
         if (start==end):
-            new_col = col + "_range__" + str(start)
-            out_df[new_col] = 0
-            out_df.loc[ out_df[col].astype(int) == start,new_col] = 1
+            val = str(start)
         else:
-            new_col = col + "_range_" + str(start) + "_" + str(end)
-            out_df[new_col] = 0
-            out_df.loc[
-                (out_df[col].astype(int) >= start) &
-                (out_df[col].astype(int) <= end  ),
-                new_col
-            ] = 1
+            val = str(start) + "-" + str(end)
+        for j in range(start,end+1):
+            out_dict[j] = val
 
     end = range_starts[-1]
-    new_col = col + "_range_" + str(end) + "_"
-    out_df[new_col] = 0
-    out_df.loc[ out_df[col].astype(int) == end,new_col] = 1
+    out_dict[end] = str(end)+"+"
+    out_df = inp_df.copy()
+
+    out_df[col] = out_df[col].apply(lambda x: out_dict[x] if x in out_dict else out_dict[end])
 
     return out_df
 
@@ -388,7 +386,8 @@ def generate_models_from_list(
         test_size=0.20,
         n_jobs=1,
         cv=3,
-        balance_sample=None
+        balance_sample=None,
+        multiclass=False,
 ):
     assert ((feature_df is not None) and (value_df is not None)) or ( reuse_model_wrapper is not None )
 
@@ -453,6 +452,7 @@ def generate_models_from_list(
             n_jobs=n_jobs,
             cv=cv,
             balance_sample=balance_sample,
+            multiclass=multiclass,
         )
     return my_models
 
@@ -597,7 +597,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     }
 
     classifier_model_dict = {
-        'Logistic': LogisticRegression(),
+        'Logistic': LogisticRegression(max_iter=500),
         'Forest':RandomForestClassifier(),
         'MLP':MLPClassifier(
             activation='identity', # This is consistently best
@@ -606,7 +606,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         ),
         'SVM':SVC(),
     }
-    
+
     regressor_cv_param_dict = {
         'Linear':{
             'fit_intercept':[True,False],
@@ -641,7 +641,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     classifier_cv_param_dict = {
         'Logistic':{
             'fit_intercept':[True,False],
-            'C':10.**(np.arange(-3, 2, 0.5))
+            'C':10.**(np.arange(-4, -1, 0.5))
         },
         'Forest':{
             'n_estimators':[3,10,30,100],
@@ -675,18 +675,11 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     this_clf_model = classifier_model_dict   [input_arguments['clf_model_type']]
     this_clf_param = classifier_cv_param_dict[input_arguments['clf_model_type']]
 
-    class_cols = {}
     class_values_list = []
     for key in class_values_ranges:
         values_df = gen_field_ranges(values_df,key,class_values_ranges[key])
 
-        for col in values_df:
-            if ( (key in col) and ("_range_" in col) ):
-                if (key in class_cols):
-                    class_cols[key].append(col)
-                else:
-                    class_cols[key] = [col]
-                class_values_list.append(col)
+        class_values_list.append(key)
 
     reg_models = generate_models_from_list(
         fields_to_model=continuous_values_cols,
@@ -707,9 +700,9 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         cv_parameters = this_clf_param,
         test_size=0.20,
         n_jobs=4,
-        scoring='precision',
+        scoring='precision_micro',
         cv=3,
-        balance_sample=1.2,
+        multiclass=True,
     )
 
     combined_models = {
@@ -771,20 +764,18 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
         input_arguments['predict_end_year']
     )
 
-    output_dict = {
-        'propogate_df':values_out_df[key_fields+combined_models['propogate_cols']],
-    }
+    output_df = values_out_df[key_fields+combined_models['propogate_cols']]
 
     for col in combined_models['reg_models'].get_model_predicted_fields():
-        output_dict[col] = combined_models['reg_models'].predict(col,joined_out_df)
+        output_df[col] = combined_models['reg_models'].predict(col,joined_out_df)
 
     for col in combined_models['class_models'].get_model_predicted_fields():
-        output_dict[col] = combined_models['class_models'].predict_proba(col,scaled_joined_out_df)
+        output_df[col] = combined_models['class_models'].predict(col,scaled_joined_out_df)
 
     os.makedirs(get_prediction_path(input_arguments['model_version']),exist_ok=True)
     output_name = get_prediction_path(input_arguments['model_version']) + input_arguments['prediction_file_name']
     with open(output_name, 'wb') as f:
-        pkl.dump(output_dict,f)
+        pkl.dump(output_df,f)
     print("Wrote "+output_name)
 
 

@@ -12,6 +12,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 
+from sklearn.multioutput import MultiOutputClassifier
+
 class ZScaler:
     def __init__(self,inp_df,columns=None):
         self.scale_dict = {}
@@ -142,6 +144,7 @@ class ModelWrapper:
         scoring=None,
         cv=3,
         balance_sample=None,
+        multiclass=False,
     ):
         if isinstance(names,str):
             names=[names]
@@ -178,6 +181,10 @@ class ModelWrapper:
             x_shuf, y_shuf = shuffle( features, values )
             x_train, x_test, y_train, y_test = train_test_split( x_shuf, y_shuf, test_size=test_size )
 
+            this_model = model
+            if multiclass:
+                this_model = MultiOutputClassifier(this_model)
+            
             if (parameters is None):
                 self.model_dict[name] = model.fit(x_train,y_train)
             else:

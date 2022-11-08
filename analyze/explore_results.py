@@ -26,9 +26,9 @@ continuous_offensive_points = {
     'rushing_yards':1/10.,
     'receiving_yards':1/10.,
     'passing_yards':1/25.,
+    'complete_pass':0.5,
 }
 categorical_offensive_points = {
-    'complete_pass':0.5,
     'pass_touchdown':4,
     'receive_touchdown':6,
     'rush_touchdown':6,
@@ -144,17 +144,9 @@ def load_predictions( input_arguments ):
 
     prediction_dict = {}
     with open(full_file_path,'rb') as f:
-        prediction_dict = pkl.load(f)
+        inp_dict = pkl.load(f)
 
-    inp_df = prediction_dict['propogate_df']
-
-    for key in prediction_dict:
-        if (key!='propogate_df'):
-            if (len(prediction_dict[key].shape)==1):
-                inp_df[key] = prediction_dict[key]
-            else:
-                inp_df[key] = prediction_dict[key][:,0]
-    return inp_df
+    return inp_dict
 
 
 # Makes ranges from categories readable
@@ -234,7 +226,7 @@ def plot_confusion(cols,inp_pred_df,inp_true_df,input_args):
     if (isinstance(cols,str)):
         cols = [cols]
     for col in cols:
-        plot_full_fn = plot_full_fn_pre + "/"+input_args['prediction_file_name']+"_" + col + ".png"
+        plot_full_fn = plot_full_fn_pre + input_args['prediction_file_name']+"_" + col + ".png"
 
         if (pred_df[col].unique().shape[0] > 20):
             continue
@@ -286,8 +278,8 @@ def plot_confusion(cols,inp_pred_df,inp_true_df,input_args):
             fn += inp_array[i,:].sum() - inp_array[i,i]
             fp += inp_array[:,i].sum() - inp_array[i,i]
 
-        micro_precision = tp / (tp+fp)
-        micro_recall = tp / (tp+fn)
+        micro_precision = tp / (tp+fp+1e-7)
+        micro_recall = tp / (tp+fn+1e-7)
 
         all_bins = [ str(s) for s in all_bins ]
 
@@ -363,70 +355,75 @@ def breakdown_categories(
 
     return out_df
 
+def get_val_from_range(inp_str):
+    if (
+            isinstance(inp_str,float) or
+            isinstance(inp_str,int) or
+            isinstance(inp_str,np.int64)
+    ):
+        return inp_str
+    if (inp_str[-1]=='+'):
+        return float(inp_str[:-1])
+    elif ('-' in inp_str):
+        vals = inp_str.split('-')
+        return (float(vals[0])+float(vals[1]))/2.0
+    else:
+        return float(inp_str)
 
-def generation_prediction_points(inp_df):
-    prediction_df = breakdown_categories(inp_df,categorical_offensive_points.keys())
-    prediction_df = breakdown_categories(prediction_df,defensive_points.keys())
-    prediction_df = breakdown_categories(prediction_df,[
-        'close_field_goal_attempts',
-        'far_field_goal_attempts',
-        'touchdown',
-    ])
-
-    for key in continuous_offensive_points:
-        if (key in prediction_df.columns.values):
-            prediction_df[key+'_points'] = (prediction_df[key].apply(lambda x: x*all_points_dict[key])).astype(int)
+def generation_prediction_points(inp_df,continuous_cols,categorical_cols):
+    prediction_df = inp_df.copy()
 
     prediction_df['passing_yards'] = prediction_df['receiving_yards']
-    prediction_df['passing_yards_points'] = (
-        prediction_df['passing_yards'].astype(float) * all_points_dict['passing_yards']
-    ).astype(int)
 
-    for col in prediction_df.columns.values:
-        if (col.endswith('_predicted')):
-            point_col = col[:-10]
-            if ( (point_col in all_points_dict) and (point_col != 'defensive_points_allowed') ):
-                prediction_df[col+'_points'] = (prediction_df[col].apply(lambda x: x*all_points_dict[point_col])).astype(int)
-
-    prediction_df['receive_touchdown'] = prediction_df['pass_touchdown_predicted']
+    prediction_df['receive_touchdown'] = prediction_df['pass_touchdown']
     prediction_df['receive_touchdown_points'] = (
-        prediction_df['receive_touchdown'].astype(float) * all_points_dict['receive_touchdown']
+        prediction_df['receive_touchdown'].apply(lambda x: get_val_from_range(x)) * all_points_dict['receive_touchdown']
     ).astype(int)
 
-    prediction_df['extra_point'] = prediction_df['pass_touchdown_predicted'] + prediction_df['rush_touchdown_predicted']
-    prediction_df['extra_point_points'] = (prediction_df['extra_point'] * kicker_points['extra_point']).astype(int)
+    prediction_df['extra_point'] = (
+        prediction_df['pass_touchdown'].apply(lambda x: get_val_from_range(x)) +
+        prediction_df['rush_touchdown'].apply(lambda x: get_val_from_range(x))
+    )
+    prediction_df['extra_point_points'] = (
+        prediction_df['extra_point'].apply(lambda x: get_val_from_range(x)) * kicker_points['extra_point']
+    ).astype(int)
 
 
     prediction_df['close_field_goal_success'] = (
-        prediction_df['close_field_goal_attempts_predicted'].astype(float) * prediction_df['close_field_goal_success_rate']
+        prediction_df['close_field_goal_attempts'].apply(lambda x: get_val_from_range(x)) * prediction_df['close_field_goal_success_rate']
     ).astype(int)
     prediction_df['close_field_goal_success_points'] = (
         prediction_df['close_field_goal_success'] * all_points_dict['close_field_goal_success']
     ).astype(int)
     prediction_df['close_field_goal_failure'] = (
-        prediction_df['close_field_goal_attempts_predicted'].astype(float) * (1.-prediction_df['close_field_goal_success_rate'])
+        prediction_df['close_field_goal_attempts'].apply(lambda x: get_val_from_range(x)) * (1.-prediction_df['close_field_goal_success_rate'])
     ).astype(int)
     prediction_df['close_field_goal_failure_points'] = (
         prediction_df['close_field_goal_failure'] * all_points_dict['close_field_goal_failure']
     ).astype(int)
 
     prediction_df['far_field_goal_success'] = (
-        prediction_df['far_field_goal_attempts_predicted'].astype(float) * prediction_df['far_field_goal_success_rate']
+        prediction_df['far_field_goal_attempts'].apply(lambda x: get_val_from_range(x)) * prediction_df['far_field_goal_success_rate']
     ).astype(int)
     prediction_df['far_field_goal_success_points'] = (
         prediction_df['far_field_goal_success'] * all_points_dict['far_field_goal_success']
     ).astype(int)
     prediction_df['far_field_goal_failure'] = (
-        prediction_df['far_field_goal_attempts_predicted'].astype(float) * (1.-prediction_df['far_field_goal_success_rate'])
+        prediction_df['far_field_goal_attempts'].apply(lambda x: get_val_from_range(x)) * (1.-prediction_df['far_field_goal_success_rate'])
     ).astype(int)
     prediction_df['far_field_goal_failure_points'] = (
         prediction_df['far_field_goal_failure'] * all_points_dict['far_field_goal_failure']
     ).astype(int)
 
-
-    prediction_df['defensive_points_allowed_points'] = prediction_df['defensive_points_allowed_predicted'].apply(
-        lambda x: defensive_points_allowed(x)
+    prediction_df['defensive_points_allowed_points'] = prediction_df['defensive_points_allowed'].apply(
+        lambda x: defensive_points_allowed(int(get_val_from_range(x)))
     )
+
+    for col in prediction_df.columns.values:
+        if ((col in all_points_dict) and (col!='defensive_points_allowed')):
+            prediction_df[col+'_points'] = (
+                prediction_df[col].apply(lambda x: get_val_from_range(x)*all_points_dict[col])
+            ).astype(int)
 
     return prediction_df
 
@@ -538,10 +535,16 @@ def __read_args__():
 
 def analyze(input_arguments):
 
-    inp_df = load_predictions(input_arguments)
+    inp_dict = load_predictions(input_arguments)
+
+    inp_df = inp_dict['output_result']
 
     print("Loading predictions...")
-    prediction_df = generation_prediction_points(inp_df)
+    prediction_df = generation_prediction_points(
+        inp_df,
+        inp_dict['continuous_cols'],
+        inp_dict['propogate_cols']
+    )
 
     key_fields = ['season','week','team','opponent']
 
@@ -578,17 +581,15 @@ def analyze(input_arguments):
     plot_pred_true(values_cols,values_df,true_values_df,input_arguments)
     plot_pred_true(points_cols,points_df,true_points_df,input_arguments)
 
-    range_mapping_dict = get_ranges(inp_df.columns)
     true_values_df_range_replaced = true_values_df.copy()
-    for cat in [
-            categorical_offensive_points,
-            defensive_points,
-    ]:
-        for key in cat.keys():
-            if (key in range_mapping_dict) and (key in true_values_df_range_replaced.columns ):
-                true_values_df_range_replaced[key] = true_values_df_range_replaced[key].apply(
-                    lambda x: range_mapping_dict[key].get_range(x)
-                )
+    class_values_ranges = inp_dict['discreet_cols']
+    for key in class_values_ranges:
+        if (key in true_values_df_range_replaced.columns):
+            true_values_df_range_replaced = model_generation.gen_field_ranges(
+                true_values_df_range_replaced,
+                key,
+                class_values_ranges[key]
+            )
 
     plot_confusion(values_cols,values_df,true_values_df_range_replaced,input_arguments)
 

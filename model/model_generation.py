@@ -710,6 +710,9 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         'class_models': class_models,
         'scaler': scaler,
         'propogate_cols': propogate_cols,
+        'continuous_cols': continuous_values_cols,
+        'propogate_cols': propogate_cols,
+        'discreet_cols': class_values_ranges,
     }
 
     if (input_arguments['output_models_file_name'] is not None):
@@ -727,7 +730,6 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         print("Wrote file "+output_name)
 
     return combined_models
-
 
 def predict(input_arguments,output_dfs,combined_models,key_fields=['season','week','team','opponent']):
 
@@ -764,7 +766,7 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
         input_arguments['predict_end_year']
     )
 
-    output_df = values_out_df[key_fields+combined_models['propogate_cols']]
+    output_df = values_out_df[key_fields+combined_models['propogate_cols']].copy()
 
     for col in combined_models['reg_models'].get_model_predicted_fields():
         output_df[col] = combined_models['reg_models'].predict(col,joined_out_df)
@@ -772,10 +774,16 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
     for col in combined_models['class_models'].get_model_predicted_fields():
         output_df[col] = combined_models['class_models'].predict(col,scaled_joined_out_df)
 
+    output_dict = {
+        'output_result': output_df,
+        'continuous_cols': combined_models['continuous_cols'],
+        'propogate_cols':  combined_models['propogate_cols' ],
+        'discreet_cols':   combined_models['discreet_cols'  ],
+    }
     os.makedirs(get_prediction_path(input_arguments['model_version']),exist_ok=True)
     output_name = get_prediction_path(input_arguments['model_version']) + input_arguments['prediction_file_name']
     with open(output_name, 'wb') as f:
-        pkl.dump(output_df,f)
+        pkl.dump(output_dict,f)
     print("Wrote "+output_name)
 
 

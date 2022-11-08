@@ -66,6 +66,14 @@ def read_args():
     parser.add_argument('--process_end_year', type=int, nargs='?',default=datetime.date.today().year,
         help='The ending year for model processing (Latest is current year)'
     )
+    parser.add_argument('--reg_model_type', type=str, nargs='?',
+        default='Linear',
+        help='The ML model to use for regression [Linear,SVM,Forest,MLP]'
+    )
+    parser.add_argument('--clf_model_type', type=str, nargs='?',
+        default='Logistic',
+        help='The ML model to use for classification [Logistic,SVM,Forest,MLP]'
+    )
     parser.add_argument('--n_rolling', type=int, nargs='?',default=3,
         help='The number of months for model lookback'
     )

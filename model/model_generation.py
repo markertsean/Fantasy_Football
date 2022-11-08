@@ -9,6 +9,8 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
+from sklearn.svm import SVR
+from sklearn.svm import SVC
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -75,6 +77,15 @@ def __read_args__():
         help='Optional scaler file to load/use'
     )
 
+    parser.add_argument('--reg_model_type', type=str, nargs='?',
+        default='Linear',
+        help='The ML model to use for regression [Linear,SVM,Forest,MLP]'
+    )
+    parser.add_argument('--clf_model_type', type=str, nargs='?',
+        default='Logistic',
+        help='The ML model to use for classification [Logistic,SVM,Forest,MLP]'
+    )
+    
     parser.add_argument('--output_scaler_file_name', type=str, nargs='?',
         help='Optional scaler file to save, otherwise uses date'
     )
@@ -452,22 +463,6 @@ def get_model_path(version=__model_version__):
 def get_prediction_path(version=__model_version__):
     return utilities.get_project_dir()+'data/predicted_values/'+version+'/'
 
-
-#def write_normalized_team_data(input_df,write_dir):
-#    os.makedirs(write_dir,exist_ok=True)
-#    print("Outputting data to "+write_dir)
-#
-#    for season in input_df['season'].unique():
-#        this_df = input_df.loc[input_df['season']==season].reset_index(drop=True)
-#        fn = "weekly_team_data_season_"+str(season)+".pkl"
-#        full_output_fn_path = write_dir+fn
-#        print("Writing "+fn+" to file")
-#        print("Season shape: ",this_df.shape)
-#        this_df.to_pickle(full_output_fn_path)
-#        print("Wrote "+full_output_fn_path)
-
-
-
 def get_features_values_dict(input_arguments):
 
     input_year_list = utilities.gen_year_list(
@@ -554,7 +549,6 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     ]
 
     class_values_ranges = {
-        #'complete_pass':[0,10,15,20,25,30,35],
         'touchdown':[0,1,2,3,4,5],
         'pass_touchdown':[0,1,2,3],
         'rush_touchdown':[0,1,2,3],
@@ -592,63 +586,38 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     n_3  = int(n_features/3.)
 
     regressor_model_dict = {
-        'LinearRegression': LinearRegression(),
-        'RandomForestRegressor':RandomForestRegressor(),
-        'MLPRegressor':MLPRegressor(
+        'Linear': LinearRegression(),
+        'Forest':RandomForestRegressor(),
+        'MLP':MLPRegressor(
             activation='identity', # This is consistently best
             solver='adam',
             max_iter=1000,
         ),
-    }
-
-    regressor_cv_param_dict = {
-        'LinearRegression':{
-            'fit_intercept':[True,False],
-        },
-        'RandomForestRegressor':{
-            'n_estimators':[300,500,700],
-            #'max_depth':[None,10,15],
-            #'max_features':[None,'sqrt'],
-            #'min_samples_leaf':[1,0.1,0.05,0.01],
-        },
-        'MLPRegressor':{
-            'hidden_layer_sizes': [
-                (n_  ,),
-                (n_23,),
-                (n_2 ,),
-                (n_3 ,),
-                (n_  , n_23,),
-                (n_23, n_2 ,),
-                (n_2 , n_3 ,),
-                (n_23, n_  ,),
-                (n_2 , n_23,),
-                (n_3 , n_2 ,),
-            ],
-        },
+        'SVM':SVR(),
     }
 
     classifier_model_dict = {
-        'LogisticRegression': LogisticRegression(),
-        'RandomForestClassifier':RandomForestClassifier(),
-        'MLPClassifier':MLPClassifier(
+        'Logistic': LogisticRegression(),
+        'Forest':RandomForestClassifier(),
+        'MLP':MLPClassifier(
             activation='identity', # This is consistently best
             solver='adam',
             max_iter=1000,
         ),
+        'SVM':SVC(),
     }
-
-    classifier_cv_param_dict = {
-        'LogisticRegression':{
+    
+    regressor_cv_param_dict = {
+        'Linear':{
             'fit_intercept':[True,False],
-            'C':[1e-3,5e-3,1e-2,5e-2,1e-1,5e-1,1e0,5e0,1e1,5e1]
         },
-        'RandomForestClassifier':{
-            'n_estimators':[300,500,700],
-            #'max_depth':[None,10,15],
-            #'max_features':[None,'sqrt'],
-            #'min_samples_leaf':[1,0.1,0.05,0.01],
+        'Forest':{
+            'n_estimators':[10,50,100,300],
+            'max_depth':[None,10,15],
+            'max_features':[None,'sqrt'],
+            'min_samples_leaf':[1,0.1,0.05,0.01],
         },
-        'MLPClassifier':{
+        'MLP':{
             'hidden_layer_sizes': [
                 (n_  ,),
                 (n_23,),
@@ -662,14 +631,49 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
                 (n_3 , n_2 ,),
             ],
         },
+        'SVM':{
+            'C':10.**(np.arange(-3, 2, 1.0)),
+            'kernel':['poly','rbg','sigmoid'],
+            'gamma':['scale','auto'],
+        }
     }
 
+    classifier_cv_param_dict = {
+        'Logistic':{
+            'fit_intercept':[True,False],
+            'C':10.**(np.arange(-3, 2, 0.5))
+        },
+        'Forest':{
+            'n_estimators':[10,50,100,300],
+            'max_depth':[None,10,15],
+            'max_features':[None,'sqrt'],
+            'min_samples_leaf':[1,0.1,0.05,0.01],
+        },
+        'MLP':{
+            'hidden_layer_sizes': [
+                (n_  ,),
+                (n_23,),
+                (n_2 ,),
+                (n_3 ,),
+                (n_  , n_23,),
+                (n_23, n_2 ,),
+                (n_2 , n_3 ,),
+                (n_23, n_  ,),
+                (n_2 , n_23,),
+                (n_3 , n_2 ,),
+            ],
+        },
+        'SVM':{
+            'C':10.**(np.arange(-3, 2, 1.0)),
+            'kernel':['poly','rbg','sigmoid'],
+            'gamma':['scale','auto'],
+        },
+    }
 
-    ################TODO: make this a flag!!!
-    this_reg_model = regressor_model_dict    ['MLPRegressor']
-    this_reg_param = regressor_cv_param_dict ['MLPRegressor']
-    this_clf_model = classifier_model_dict   ['MLPClassifier']
-    this_clf_param = classifier_cv_param_dict['MLPClassifier']
+    this_reg_model = regressor_model_dict    [input_arguments['reg_model_type']]
+    this_reg_param = regressor_cv_param_dict [input_arguments['reg_model_type']]
+    this_clf_model = classifier_model_dict   [input_arguments['clf_model_type']]
+    this_clf_param = classifier_cv_param_dict[input_arguments['clf_model_type']]
 
     class_cols = {}
     class_values_list = []
@@ -704,6 +708,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         cv_parameters = this_clf_param,
         test_size=0.20,
         n_jobs=4,
+        scoring='recall',
         cv=3,
         balance_sample=1.2,
     )

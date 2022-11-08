@@ -612,10 +612,10 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
             'fit_intercept':[True,False],
         },
         'Forest':{
-            'n_estimators':[10,50,100,300],
+            'n_estimators':[100,300,500],
             'max_depth':[None,10,15],
-            'max_features':[None,'sqrt'],
-            'min_samples_leaf':[1,0.1,0.05,0.01],
+            #'max_features':[None,'sqrt'],
+            #'min_samples_leaf':[1,0.1,0.05,0.01],
         },
         'MLP':{
             'hidden_layer_sizes': [
@@ -632,8 +632,8 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
             ],
         },
         'SVM':{
-            'C':10.**(np.arange(-3, 2, 1.0)),
-            'kernel':['poly','rbg','sigmoid'],
+            'C':10.**(np.arange(-2, 1, 1.0)),
+            'kernel':['poly','rbf','sigmoid'],
             'gamma':['scale','auto'],
         }
     }
@@ -644,10 +644,10 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
             'C':10.**(np.arange(-3, 2, 0.5))
         },
         'Forest':{
-            'n_estimators':[10,50,100,300],
+            'n_estimators':[3,10,30,100],
             'max_depth':[None,10,15],
-            'max_features':[None,'sqrt'],
-            'min_samples_leaf':[1,0.1,0.05,0.01],
+            #'max_features':[None,'sqrt'],
+            #'min_samples_leaf':[1,0.1,0.05,0.01],
         },
         'MLP':{
             'hidden_layer_sizes': [
@@ -664,8 +664,8 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
             ],
         },
         'SVM':{
-            'C':10.**(np.arange(-3, 2, 1.0)),
-            'kernel':['poly','rbg','sigmoid'],
+            'C':10.**(np.arange(-2, 1, 1.0)),
+            'kernel':['poly','rbf','sigmoid'],
             'gamma':['scale','auto'],
         },
     }
@@ -698,7 +698,6 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         n_jobs=4,
         cv=3,
     )
-    print(reg_models.model(continuous_values_cols[0]))
 
     class_models = generate_models_from_list(
         fields_to_model=class_values_list,
@@ -708,7 +707,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         cv_parameters = this_clf_param,
         test_size=0.20,
         n_jobs=4,
-        scoring='recall',
+        scoring='precision',
         cv=3,
         balance_sample=1.2,
     )

@@ -1,25 +1,6 @@
 import sys
 
-#from util.utilities import PCACols,ZScaler
 from sklearn.decomposition import PCA
-
-from sklearn.utils import shuffle
-from sklearn.model_selection import train_test_split
-from sklearn.model_selection import GridSearchCV
-from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.neural_network import MLPRegressor
-from sklearn.svm import SVR
-from sklearn.svm import SVC
-
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.neighbors import KNeighborsRegressor
-
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.neural_network import MLPClassifier
-
-from sklearn.multioutput import MultiOutputClassifier
 
 import pickle as pkl
 import numpy as np
@@ -34,7 +15,7 @@ sys.path.append('/home/sean/Documents/Fantasy_Football/')
 from normalize import normalize_raw_input
 from util import utilities
 from util import argument_validation
-from model.data_structures import ZScaler,PCACols,ModelWrapper,get_index_resampled_categories_reduce_largest
+from model.data_structures import ZScaler,PCACols,ModelWrapper,get_index_resampled_categories_reduce_largest,MLTrainingHelper
 
 
 __model_version__='0.1.0'
@@ -498,156 +479,21 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         on=key_fields
     )
 
-    # For NN models
-    n_features = len(team_fields)
-    n_   = n_features
-    n_23 = int(n_features*2./3)
-    n_2  = int(n_features/2.)
-    n_3  = int(n_features/3.)
+    ml_helper = MLTrainingHelper(
+        joined_df,
+        scaled_joined_df,
+        input_arguments['reg_model_type'],
+        input_arguments['clf_model_type'],
+    )
 
-    regressor_model_dict = {
-        'Linear': LinearRegression(),
-        'Forest':RandomForestRegressor(),
-        'MLP':MLPRegressor(
-            activation='identity', # This is consistently best
-            solver='adam',
-            max_iter=1000,
-        ),
-        'SVM':SVR(),
-        'KNN':KNeighborsRegressor(),
-    }
-
-    classifier_model_dict = {
-        'Logistic': LogisticRegression(max_iter=500),
-        'Forest':RandomForestClassifier(),
-        'MLP':MLPClassifier(
-            activation='identity', # This is consistently best
-            solver='adam',
-            max_iter=1000,
-        ),
-        'SVM':SVC(),
-        'KNN':KNeighborsClassifier(),
-    }
-
-    regressor_cv_param_dict = {
-        'Linear':{
-            'fit_intercept':[True,False],
-        },
-        'Forest':{
-            'n_estimators':[100,300,500],
-            'max_depth':[None,10,15],
-            #'max_features':[None,'sqrt'],
-            #'min_samples_leaf':[1,0.1,0.05,0.01],
-        },
-        'MLP':{
-            'hidden_layer_sizes': [
-                (n_  ,),
-                (n_23,),
-                (n_2 ,),
-                (n_3 ,),
-
-                (n_  , n_23,),
-                (n_  , n_2 ,),
-                (n_23, n_  ,),
-                (n_23, n_2 ,),
-                (n_2 , n_23,),
-                (n_2 , n_3 ,),
-                (n_3 , n_2 ,),
-
-                (n_  , n_23, n_  ,),
-                (n_  , n_23, n_23,),
-                (n_  , n_23, n_2 ,),
-                (n_  , n_23, n_3 ,),
-
-                (n_23, n_  , n_  ,),
-                (n_23, n_23, n_23,),
-                (n_23, n_2 , n_2 ,),
-                (n_23, n_3 , n_3 ,),
-            ],
-        },
-        'SVM':{
-            'C':10.**(np.arange(-2, 1, 1.0)),
-            'kernel':['poly','rbf','sigmoid'],
-            'gamma':['scale','auto'],
-        },
-        'KNN':{
-            'n_neighbors': [10,15,20,25],
-            'weights': ['uniform','distance'],
-        },
-    }
-
-    classifier_cv_param_dict = {
-        'Logistic':{
-            'fit_intercept':[True,False],
-            'C':10.**(np.arange(-4, -1, 0.5))
-        },
-        'Forest':{
-            'n_estimators':[3,10,30,100],
-            'max_depth':[None,10,15],
-            #'max_features':[None,'sqrt'],
-            #'min_samples_leaf':[1,0.1,0.05,0.01],
-        },
-        'MLP':{
-            'hidden_layer_sizes': [
-                (n_  ,),
-                (n_23,),
-                (n_2 ,),
-                (n_3 ,),
-
-                (n_  , n_23,),
-                (n_  , n_2 ,),
-                (n_23, n_  ,),
-                (n_23, n_2 ,),
-                (n_2 , n_23,),
-                (n_2 , n_3 ,),
-                (n_3 , n_2 ,),
-
-                (n_  , n_23, n_  ,),
-                (n_  , n_23, n_23,),
-                (n_  , n_23, n_2 ,),
-                (n_  , n_23, n_3 ,),
-
-                (n_23, n_  , n_  ,),
-                (n_23, n_23, n_23,),
-                (n_23, n_2 , n_2 ,),
-                (n_23, n_3 , n_3 ,),
-            ],
-        },
-        'SVM':{
-            'C':10.**(np.arange(-2, 1, 1.0)),
-            'kernel':['poly','rbf','sigmoid'],
-            'gamma':['scale','auto'],
-        },
-        'KNN':{
-            'n_neighbors': [10,15,20,25],
-            'weights': ['uniform','distance'],
-        },
-    }
-
-    regressor_input_x_dict = {
-        'Linear': joined_df,
-        'Forest': joined_df,
-        'MLP'   : joined_df,
-        'SVM'   : scaled_joined_df,
-        'KNN'   : scaled_joined_df,
-    }
-
-    classifier_input_x_dict = {
-        'Logistic': scaled_joined_df,
-        'Forest'  : joined_df,
-        'MLP'     : scaled_joined_df,
-        'SVM'     : scaled_joined_df,
-        'KNN'     : scaled_joined_df,
-    }
-
-    this_reg_model = regressor_model_dict    [input_arguments['reg_model_type']]
-    this_reg_param = regressor_cv_param_dict [input_arguments['reg_model_type']]
-    this_reg_x     = regressor_input_x_dict  [input_arguments['reg_model_type']]
+    this_reg_model = ml_helper.get_regressor_model()
+    this_reg_param = ml_helper.get_regressor_model_cv_params()
+    this_reg_x     = ml_helper.get_regressor_input_x()
     this_reg_y     = values_df.loc[values_df.index.intersection(this_reg_x.index)]
 
-    this_clf_model = classifier_model_dict   [input_arguments['clf_model_type']]
-    this_clf_param = classifier_cv_param_dict[input_arguments['clf_model_type']]
-    this_clf_x     = classifier_input_x_dict [input_arguments['clf_model_type']]
+    this_clf_model = ml_helper.get_classifier_model()
+    this_clf_param = ml_helper.get_classifier_model_cv_params()
+    this_clf_x     = ml_helper.get_classifier_input_x()
     this_clf_y     = values_df.loc[values_df.index.intersection(this_clf_x.index)]
 
     class_values_list = []
@@ -749,24 +595,15 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
 
     output_df = values_out_df[key_fields+combined_models['propogate_cols']].copy()
 
-    regressor_input_x_dict = {
-        'Linear': joined_out_df,
-        'Forest': joined_out_df,
-        'MLP'   : joined_out_df,
-        'SVM'   : scaled_joined_out_df,
-        'KNN'   : scaled_joined_out_df,
-    }
+    ml_helper = MLTrainingHelper(
+        joined_out_df,
+        scaled_joined_out_df,
+        input_arguments['reg_model_type'],
+        input_arguments['clf_model_type'],
+    )
 
-    classifier_input_x_dict = {
-        'Logistic': scaled_joined_out_df,
-        'Forest'  : joined_out_df,
-        'MLP'     : scaled_joined_out_df,
-        'SVM'     : scaled_joined_out_df,
-        'KNN'     : scaled_joined_out_df,
-    }
-
-    this_reg_x     = regressor_input_x_dict  [input_arguments['reg_model_type']]
-    this_clf_x     = classifier_input_x_dict [input_arguments['clf_model_type']]
+    this_reg_x = ml_helper.get_regressor_input_x()
+    this_clf_x = ml_helper.get_classifier_input_x()
 
     for col in combined_models['reg_models'].get_model_predicted_fields():
         output_df[col] = combined_models['reg_models'].predict(col,this_reg_x)

@@ -198,7 +198,7 @@ def plot_pred_true(cols,inp_pred_df,inp_true_df,input_args):
         )
 
         plt.clf()
-        plt.scatter(pred_df[col],true_df[col],color='r',alpha=0.05)
+        plt.scatter(pred_df[col],true_df[col],color='r',alpha=0.1)
         plt.plot([min_value,max_value],[min_value,max_value],linestyle='--',color='b')
         plt.xlim([int(min_value),int(max_value)])
         plt.ylim([int(min_value),int(max_value)])

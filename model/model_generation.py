@@ -15,7 +15,7 @@ sys.path.append('/home/sean/Documents/Fantasy_Football/')
 from normalize import normalize_raw_input
 from util import utilities
 from util import argument_validation
-from model.data_structures import ZScaler,PCACols,ModelWrapper,get_index_resampled_categories_reduce_largest,MLTrainingHelper
+from model.data_structures import ZScaler,PCACols,ModelWrapper,get_index_resampled_categories_reduce_largest,MLTrainingHelper,PCATeamOpp
 
 
 __model_version__='0.1.0'
@@ -260,10 +260,6 @@ def generate_weekly_team_features_values( inp_df, key_fields, n_rolling ):
         'opposing_fields':opp_fields,
     }
 
-#TODO: implement
-def load_scale_model():
-    pass
-
 def gen_scale_model( inp_dict ):
     scaler = ZScaler( inp_dict['team_df'],columns=inp_dict['team_fields'])
     scaler.add( inp_dict['opposing_df'][inp_dict['opposing_fields']] )
@@ -281,24 +277,13 @@ def scale_combine_team_opposition( inp_dict, scaler, key_fields ):
 
     return joined_weekly_df
 
-#TODO:implement
-def load_pca_model():
-    pass
-
-def gen_pca_model( inp_df, inp_fields, n_components ):
-    pca_model = PCACols(
-        inp_df,
-        inp_fields,
-        n_components
-    )
-    return pca_model
-
 
 def generate_models_from_list(
         fields_to_model,
         feature_df =None,
         value_df = None,
         scaler = None,
+        pca_obj = None,
         reuse_model_wrapper = None,
         model = None,
         cv_parameters = None,
@@ -359,7 +344,7 @@ def generate_models_from_list(
 
     my_models = 0
     if (reuse_model_wrapper is None):
-        my_models = ModelWrapper( feature_df, value_df, scaler )
+        my_models = ModelWrapper( feature_df, value_df, scaler, pca_obj )
     else:
         my_models = reuse_model_wrapper
 
@@ -408,23 +393,6 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     # Zscale fields
     scaler = gen_scale_model(output_dfs)
 
-    #TODO:Consider inplementing Reduce fields
-    #TODO:conditional load
-    #team_pca = gen_pca_model(
-    #    scaled_dict['joined_weekly_df'],
-    #    scaled_dict['team_fields'],
-    #    input_arguments['n_components_team']
-    #)
-    #transformed_team = team_pca.transform( scaled_dict['joined_weekly_df'] )
-    #opp_pca = gen_pca_model(
-    #    scaled_dict['joined_weekly_df'],
-    #    scaled_dict['opposing_fields'],
-    #    input_arguments['n_components_opp']
-    #)
-    #transformed_opp = opp_pca.transform( scaled_dict['joined_weekly_df'] )
-    #feature_array = np.concatenate([transformed_team,transformed_opp],axis=1)
-
-
     values_cols = [
         'rushing_yards', 'receiving_yards', 'passing_yards',
         'complete_pass',
@@ -449,6 +417,30 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         'fumble_recovery_rate',
     ]
 
+    team_fields         = output_dfs['team_fields']
+    opposing_fields     = output_dfs['opposing_fields']
+
+    scaled_joined_df_pre = scale_combine_team_opposition( output_dfs, scaler, key_fields )
+    scaled_joined_df    = utilities.filter_df_year( scaled_joined_df_pre     , input_arguments['process_start_year'], input_arguments['process_end_year'] ).dropna()
+    team_rolling_df     = utilities.filter_df_year( output_dfs['team_df']    , input_arguments['process_start_year'], input_arguments['process_end_year'] ).dropna()
+    opposing_rolling_df = utilities.filter_df_year( output_dfs['opposing_df'], input_arguments['process_start_year'], input_arguments['process_end_year'] ).dropna()
+    values_df           = utilities.filter_df_year( output_dfs['value_df']   , input_arguments['process_start_year'], input_arguments['process_end_year'] )
+
+    joined_df = team_rolling_df[key_fields+team_fields].merge(
+        opposing_rolling_df[key_fields+opposing_fields],
+        on=key_fields
+    )
+
+    scaled_joined_df = scaled_joined_df.merge(
+        team_rolling_df[key_fields],
+        on=key_fields
+    )
+
+    values_df = values_df.merge(
+        team_rolling_df[key_fields],
+        on=key_fields
+    )
+
     class_values_ranges = {
         'touchdown':[0,1,2,3,4,5],
         'pass_touchdown':[0,1,2,3],
@@ -463,50 +455,57 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         'defensive_fumble_forced':[0,2,4],
         'defensive_interception':[0,1,2],
     }
+    class_values_list = []
+    for key in class_values_ranges:
+        values_df = gen_field_ranges(values_df,key,class_values_ranges[key])
+        class_values_list.append(key)
 
-
-    team_fields         = output_dfs['team_fields']
-    opposing_fields     = output_dfs['opposing_fields']
-
-    scaled_joined_df_pre = scale_combine_team_opposition( output_dfs, scaler, key_fields )
-    scaled_joined_df    = utilities.filter_df_year( scaled_joined_df_pre     , input_arguments['process_start_year'], input_arguments['process_end_year'] )
-    values_df           = utilities.filter_df_year( output_dfs['value_df']   , input_arguments['process_start_year'], input_arguments['process_end_year'] )
-    team_rolling_df     = utilities.filter_df_year( output_dfs['team_df']    , input_arguments['process_start_year'], input_arguments['process_end_year'] )
-    opposing_rolling_df = utilities.filter_df_year( output_dfs['opposing_df'], input_arguments['process_start_year'], input_arguments['process_end_year'] )
-
-    joined_df = team_rolling_df[key_fields+team_fields].merge(
+    pca_comb = PCATeamOpp(
+        scaler,
+        team_rolling_df,
+        team_rolling_df.drop(columns=key_fields).columns,
+        input_arguments['n_components_team'],
+        opposing_rolling_df,
+        opposing_rolling_df.drop(columns=key_fields).columns,
+        input_arguments['n_components_opp'],
+    )
+    team_pca_inp_df = team_rolling_df[key_fields+team_fields].merge(
+        opposing_rolling_df[key_fields],
+        on=key_fields
+    ).copy().sort_values(key_fields)
+    opp_pca_inp_df = team_rolling_df[key_fields].merge(
         opposing_rolling_df[key_fields+opposing_fields],
         on=key_fields
-    )
+    ).copy().sort_values(key_fields)
+    pca_data = pca_comb.transform( team_pca_inp_df, opp_pca_inp_df )
+    pca_data_cols = [str(i) for i in range(0,pca_data.shape[1])]
+    pca_df = pd.DataFrame(pca_data,columns = pca_data_cols)
+
 
     ml_helper = MLTrainingHelper(
         joined_df,
         scaled_joined_df,
+        pca_df,
         input_arguments['reg_model_type'],
         input_arguments['clf_model_type'],
     )
 
     this_reg_model = ml_helper.get_regressor_model()
     this_reg_param = ml_helper.get_regressor_model_cv_params()
-    this_reg_x     = ml_helper.get_regressor_input_x()
+    this_reg_x     = ml_helper.get_regressor_input_x().copy()
     this_reg_y     = values_df.loc[values_df.index.intersection(this_reg_x.index)]
 
     this_clf_model = ml_helper.get_classifier_model()
     this_clf_param = ml_helper.get_classifier_model_cv_params()
-    this_clf_x     = ml_helper.get_classifier_input_x()
+    this_clf_x     = ml_helper.get_classifier_input_x().copy()
     this_clf_y     = values_df.loc[values_df.index.intersection(this_clf_x.index)]
-
-    class_values_list = []
-    for key in class_values_ranges:
-        values_df = gen_field_ranges(values_df,key,class_values_ranges[key])
-
-        class_values_list.append(key)
 
     reg_models = generate_models_from_list(
         fields_to_model = continuous_values_cols,
         feature_df      = this_reg_x,
         value_df        = this_reg_y,
         scaler          = scaler,
+        pca_obj         = pca_comb,
         model           = this_reg_model,
         cv_parameters   = this_reg_param,
         test_size       = 0.20,
@@ -519,6 +518,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         feature_df      = this_clf_x,
         value_df        = this_clf_y,
         scaler          = scaler,
+        pca_obj         = pca_comb,
         model           = this_clf_model,
         cv_parameters   = this_clf_param,
         test_size       = 0.20,
@@ -593,11 +593,24 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
         input_arguments['predict_end_year']
     )
 
+    team_pca_inp_df = team_rolling_df[key_fields+team_fields].merge(
+        opposing_rolling_df[key_fields],
+        on=key_fields
+    ).sort_values(key_fields)
+    opp_pca_inp_df = team_rolling_df[key_fields].merge(
+        opposing_rolling_df[key_fields+opposing_fields],
+        on=key_fields
+    ).sort_values(key_fields)
+    pca_data = combined_models['reg_models'].transform( team_pca_inp_df, opp_pca_inp_df )
+    pca_data_cols = [str(i) for i in range(0,pca_data.shape[1])]
+    pca_out_df = pd.DataFrame(pca_data,columns = pca_data_cols)
+
     output_df = values_out_df[key_fields+combined_models['propogate_cols']].copy()
 
     ml_helper = MLTrainingHelper(
         joined_out_df,
         scaled_joined_out_df,
+        pca_out_df,
         input_arguments['reg_model_type'],
         input_arguments['clf_model_type'],
     )

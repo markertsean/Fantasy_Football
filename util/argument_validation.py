@@ -220,12 +220,12 @@ def build_args(
         )
     if("n_components_team" in in_list):
         in_list.remove("n_components_team")
-        parser.add_argument('--n_components_team', type=int, nargs='?',default=24,
+        parser.add_argument('--n_components_team', type=int, nargs='?',default=20,
             help='The number of PCA components for the model team data'
         )
     if("n_components_opp" in in_list):
         in_list.remove("n_components_opp")
-        parser.add_argument('--n_components_opp', type=int, nargs='?',default=15,
+        parser.add_argument('--n_components_opp', type=int, nargs='?',default=10,
             help='The number of PCA components for the model opposing team data'
         )
 

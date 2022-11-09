@@ -94,6 +94,7 @@ class ZScaler:
         for col in cols:
             assert col in self.scale_dict # Can only scale columns in the scaler!
             out_df[col]=(out_df[col]-self.scale_dict[col]['mean'])/self.scale_dict[col]['std']
+            out_df[col]=out_df[col].fillna(0.0)
             out_df.rename(columns={col:col+'_z'},inplace=True)
         return out_df
 
@@ -103,11 +104,12 @@ class PCACols:
         self.columns = columns
         self.n_components = n_components
         self.model_pca = PCA(n_components=n_components)
-        self.model_pca.fit(inp_df[self.columns])
+        self.model_pca.fit(inp_df[self.columns].dropna())
 
     def __repr__(self):
         out_str = ""
         out_str+= "\tN components = "+str(self.n_components)+"\n"
+        out_str+= "\tN columns    = "+str(len(self.columns))+"\n"
         out_str+= "\tColumns = [\n"
         for col in self.columns:
             out_str+="\t\t"+str(col)+",\n"
@@ -127,12 +129,60 @@ class PCACols:
     def transform(self,inp_df):
         return self.model_pca.transform(inp_df[self.columns])
 
+class PCATeamOpp:
+    def __init__(
+        self,
+        scaler,
+        team_df,
+        team_cols,
+        n_team,
+        opp_df,
+        opp_cols,
+        n_opp,
+    ):
+        self.scaler      = scaler
+
+        self.team_cols   = team_cols
+        scaled_team_df   = scaler.scale_cols(team_df[self.team_cols],self.team_cols)
+        self.team_cols_s = scaled_team_df.columns
+        self.team_PCA    = PCACols(scaled_team_df,self.team_cols_s,n_team)
+
+        self.opp_cols    = opp_cols
+        scaled_opp_df    = scaler.scale_cols(opp_df[opp_cols],opp_cols)
+        self.opp_cols_s  = scaled_opp_df.columns
+        self.opp_PCA     = PCACols(scaled_opp_df,self.opp_cols_s,n_opp)
+
+    def __str__(self):
+        return self.team_PCA.__str__() + "\n" + self.opp_PCA.__str__()
+
+    def team_transform(
+        self,
+        team_df,
+    ):
+        team_scaled_df = self.scaler.scale_cols(team_df[self.team_cols],self.team_cols)
+        return self.team_PCA.transform(team_scaled_df)
+
+    def opp_transform(
+        self,
+        opp_df,
+    ):
+        opp_scaled_df = self.scaler.scale_cols(opp_df[self.opp_cols],self.opp_cols)
+        return self.opp_PCA.transform(opp_scaled_df)
+
+    def transform(
+        self,
+        team_df,
+        opp_df
+    ):
+        return np.concatenate([self.team_transform(team_df),self.opp_transform(opp_df)],axis=1)
+
 class ModelWrapper:
     def __init__(
         self,
         input_x_df,
         input_y_df,
         scaler,
+        pca_obj,
         key_fields=['season','week','team','opponent']
     ):
         self.x_df = input_x_df.dropna()
@@ -146,6 +196,9 @@ class ModelWrapper:
         assert isinstance(scaler,ZScaler), "input scalar must be of class ZScaler"
         self.scaler = scaler
 
+        assert isinstance(pca_obj,PCATeamOpp), "input pca_obj must be of class PCATeamOpp"
+        self.pca_obj = pca_obj
+        
         self.model_dict = {}
         self.col_dict = {}
         self.cv_dict = {}
@@ -174,6 +227,12 @@ class ModelWrapper:
 
     def scale_cols(self,inp_df,cols):
         return self.scaler.scale_cols(inp_df,cols)
+
+    def get_pca_obj(self):
+        return self.pca_obj
+
+    def transform(self,team_df,opp_df):
+        return self.pca_obj.transform(team_df,opp_df)
 
     def train_model(
         self,
@@ -251,6 +310,7 @@ class MLTrainingHelper:
         self,
         joined_df,
         scaled_joined_df,
+        pca_df,
         reg_model,
         clf_model,
         key_fields = ['season','week','team','opponent'],
@@ -269,12 +329,13 @@ class MLTrainingHelper:
             'KNN'   : scaled_joined_df,
         }
 
-        # For NN models
-        n_features = (self.regressor_input_x_dict[self.reg_model]).drop(columns=key_fields).shape[1]
-        n_   = n_features
-        n_23 = int(n_features*2./3)
-        n_2  = int(n_features/2.)
-        n_3  = int(n_features/3.)
+        self.classifier_input_x_dict = {
+            'Logistic': scaled_joined_df,
+            'Forest'  : joined_df,
+            'MLP'     : scaled_joined_df,
+            'SVM'     : scaled_joined_df,
+            'KNN'     : scaled_joined_df,
+        }
 
         self.regressor_model_dict = {
             'Linear': LinearRegression(),
@@ -287,6 +348,25 @@ class MLTrainingHelper:
             'SVM':SVR(),
             'KNN':KNeighborsRegressor(),
         }
+
+        self.classifier_model_dict = {
+            'Logistic': LogisticRegression(max_iter=1000),
+            'Forest':RandomForestClassifier(),
+            'MLP':MLPClassifier(
+                activation='identity', # This is consistently best
+                solver='adam',
+                max_iter=1000,
+            ),
+            'SVM':SVC(),
+            'KNN':KNeighborsClassifier(),
+        }
+
+        # For NN models
+        n_features = (self.regressor_input_x_dict[self.reg_model]).drop(columns=key_fields).shape[1]
+        n_   = n_features
+        n_23 = int(n_features*2./3)
+        n_2  = int(n_features/2.)
+        n_3  = int(n_features/3.)
 
         self.regressor_cv_param_dict = {
             'Linear':{
@@ -335,26 +415,6 @@ class MLTrainingHelper:
             },
         }
 
-        self.classifier_input_x_dict = {
-            'Logistic': scaled_joined_df,
-            'Forest'  : joined_df,
-            'MLP'     : scaled_joined_df,
-            'SVM'     : scaled_joined_df,
-            'KNN'     : scaled_joined_df,
-        }
-
-        self.classifier_model_dict = {
-            'Logistic': LogisticRegression(max_iter=500),
-            'Forest':RandomForestClassifier(),
-            'MLP':MLPClassifier(
-                activation='identity', # This is consistently best
-                solver='adam',
-                max_iter=1000,
-            ),
-            'SVM':SVC(),
-            'KNN':KNeighborsClassifier(),
-        }
-
         n_features = (self.classifier_input_x_dict[self.clf_model]).drop(columns=key_fields).shape[1]
         n_   = n_features
         n_23 = int(n_features*2./3)
@@ -364,7 +424,7 @@ class MLTrainingHelper:
         self.classifier_cv_param_dict = {
             'Logistic':{
                 'fit_intercept':[True,False],
-                'C':10.**(np.arange(-4, -1, 0.5))
+                'C':10.**(np.arange(-4, 1, 0.5))
             },
             'Forest':{
                 'n_estimators':[3,10,30,100],

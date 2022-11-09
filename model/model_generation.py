@@ -12,6 +12,9 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.svm import SVR
 from sklearn.svm import SVC
 
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsRegressor
+
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
@@ -31,7 +34,7 @@ sys.path.append('/home/sean/Documents/Fantasy_Football/')
 from normalize import normalize_raw_input
 from util import utilities
 from util import argument_validation
-from model.data_structures import ZScaler,PCACols,ModelWrapper
+from model.data_structures import ZScaler,PCACols,ModelWrapper,get_index_resampled_categories_reduce_largest
 
 
 __model_version__='0.1.0'
@@ -594,6 +597,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
             max_iter=1000,
         ),
         'SVM':SVR(),
+        'KNN':KNeighborsRegressor(),
     }
 
     classifier_model_dict = {
@@ -605,6 +609,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
             max_iter=1000,
         ),
         'SVM':SVC(),
+        'KNN':KNeighborsClassifier(),
     }
 
     regressor_cv_param_dict = {
@@ -647,7 +652,11 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
             'C':10.**(np.arange(-2, 1, 1.0)),
             'kernel':['poly','rbf','sigmoid'],
             'gamma':['scale','auto'],
-        }
+        },
+        'KNN':{
+            'n_neighbors': [10,15,20,25],
+            'weights': ['uniform','distance'],
+        },
     }
 
     classifier_cv_param_dict = {
@@ -692,12 +701,37 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
             'kernel':['poly','rbf','sigmoid'],
             'gamma':['scale','auto'],
         },
+        'KNN':{
+            'n_neighbors': [10,15,20,25],
+            'weights': ['uniform','distance'],
+        },
+    }
+
+    regressor_input_x_dict = {
+        'Linear': joined_df,
+        'Forest': joined_df,
+        'MLP'   : joined_df,
+        'SVM'   : scaled_joined_df,
+        'KNN'   : scaled_joined_df,
+    }
+
+    classifier_input_x_dict = {
+        'Logistic': scaled_joined_df,
+        'Forest'  : joined_df,
+        'MLP'     : scaled_joined_df,
+        'SVM'     : scaled_joined_df,
+        'KNN'     : scaled_joined_df,
     }
 
     this_reg_model = regressor_model_dict    [input_arguments['reg_model_type']]
     this_reg_param = regressor_cv_param_dict [input_arguments['reg_model_type']]
+    this_reg_x     = regressor_input_x_dict  [input_arguments['reg_model_type']]
+    this_reg_y     = values_df.loc[values_df.index.intersection(this_reg_x.index)]
+
     this_clf_model = classifier_model_dict   [input_arguments['clf_model_type']]
     this_clf_param = classifier_cv_param_dict[input_arguments['clf_model_type']]
+    this_clf_x     = classifier_input_x_dict [input_arguments['clf_model_type']]
+    this_clf_y     = values_df.loc[values_df.index.intersection(this_clf_x.index)]
 
     class_values_list = []
     for key in class_values_ranges:
@@ -706,28 +740,28 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         class_values_list.append(key)
 
     reg_models = generate_models_from_list(
-        fields_to_model=continuous_values_cols,
-        feature_df = joined_df,
-        value_df = values_df,
-        model = this_reg_model,
-        cv_parameters = this_reg_param,
-        test_size=0.20,
-        n_jobs=4,
-        cv=3,
+        fields_to_model = continuous_values_cols,
+        feature_df      = this_reg_x,
+        value_df        = this_reg_y,
+        model           = this_reg_model,
+        cv_parameters   = this_reg_param,
+        test_size       = 0.20,
+        n_jobs          = 4,
+        cv              = 3,
     )
 
     class_models = generate_models_from_list(
-        fields_to_model=class_values_list,
-        feature_df = scaled_joined_df,
-        value_df = values_df,
-        model = this_clf_model,
-        cv_parameters = this_clf_param,
-        test_size=0.20,
-        n_jobs=4,
-        scoring='precision_micro',
-        cv=3,
-        multiclass=True,
-        balance_sample=1.2
+        fields_to_model = class_values_list,
+        feature_df      = this_clf_x,
+        value_df        = this_clf_y,
+        model           = this_clf_model,
+        cv_parameters   = this_clf_param,
+        test_size       = 0.20,
+        n_jobs          = 4,
+        scoring         = 'precision_micro',
+        cv              = 3,
+        multiclass      = True,
+        balance_sample  = 1.2
     )
 
     combined_models = {
@@ -793,11 +827,30 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
 
     output_df = values_out_df[key_fields+combined_models['propogate_cols']].copy()
 
+    regressor_input_x_dict = {
+        'Linear': joined_out_df,
+        'Forest': joined_out_df,
+        'MLP'   : joined_out_df,
+        'SVM'   : scaled_joined_out_df,
+        'KNN'   : scaled_joined_out_df,
+    }
+
+    classifier_input_x_dict = {
+        'Logistic': scaled_joined_out_df,
+        'Forest'  : joined_out_df,
+        'MLP'     : scaled_joined_out_df,
+        'SVM'     : scaled_joined_out_df,
+        'KNN'     : scaled_joined_out_df,
+    }
+
+    this_reg_x     = regressor_input_x_dict  [input_arguments['reg_model_type']]
+    this_clf_x     = classifier_input_x_dict [input_arguments['clf_model_type']]
+
     for col in combined_models['reg_models'].get_model_predicted_fields():
-        output_df[col] = combined_models['reg_models'].predict(col,joined_out_df)
+        output_df[col] = combined_models['reg_models'].predict(col,this_reg_x)
 
     for col in combined_models['class_models'].get_model_predicted_fields():
-        output_df[col] = combined_models['class_models'].predict(col,scaled_joined_out_df)
+        output_df[col] = combined_models['class_models'].predict(col,this_clf_x)
 
     output_dict = {
         'output_result': output_df,

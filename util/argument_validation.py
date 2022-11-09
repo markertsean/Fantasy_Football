@@ -48,10 +48,10 @@ def run_argument_validation(input_arguments):
             if ( not os.path.exists(fn) ):
                 raise IOError("File does not exist: "+fn)
 
-        valid_reg_models = ['Linear','SVM','Forest','MLP']
+        valid_reg_models = ['Linear','SVM','Forest','MLP','KNN']
         assert (input_arguments['reg_model_type'] in valid_reg_models), "reg_model_type must be one of "+' '.join(valid_reg_models)
 
-        valid_clf_models = ['Logistic','SVM','Forest','MLP']
+        valid_clf_models = ['Logistic','SVM','Forest','MLP','KNN']
         assert (input_arguments['clf_model_type'] in valid_clf_models), "clf_model_type must be one of "+' '.join(valid_clf_models)
 
         

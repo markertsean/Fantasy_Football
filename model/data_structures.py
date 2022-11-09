@@ -14,6 +14,30 @@ from sklearn.neural_network import MLPClassifier
 
 from sklearn.multioutput import MultiOutputClassifier
 
+def get_index_resampled_categories_reduce_largest(inp_df,col,balance_sample):
+    max_val = inp_df.shape[0]
+    max_vals = []
+    for case in inp_df[col].unique():
+        max_vals.append(inp_df.loc[inp_df[col]==case].shape[0])
+    sorted_vals = sorted(max_vals)
+    sorted_vals = sorted_vals[:-1]
+    if (len(sorted_vals)>0):
+        max_val = sorted_vals[-1]
+
+    # Resample the majority group
+    concat_df_list = []
+    for case in inp_df[col].unique():
+        case_df = inp_df.loc[inp_df[col]==case]
+        if ( int(balance_sample*max_val) < case_df.shape[0] ):
+            case_df = case_df.sample(int(balance_sample*max_val))#,replace=True).drop_duplicates()
+        concat_df_list.append(
+            case_df
+        )
+
+    concat_df = pd.concat(concat_df_list)
+    return concat_df.index
+
+
 class ZScaler:
     def __init__(self,inp_df,columns=None):
         self.scale_dict = {}
@@ -162,28 +186,7 @@ class ModelWrapper:
             if (balance_sample is not None):
                 assert isinstance(balance_sample,float), "balance_sample must be float"
 
-                # Determine second largest shape, limit anything above that
-                max_val = self.y_df.shape[0]
-                max_vals = []
-                for case in self.y_df[name].unique():
-                    max_vals.append(self.y_df.loc[self.y_df[name]==case].shape[0])
-                sorted_vals = sorted(max_vals)
-                sorted_vals = sorted_vals[:-1]
-                if (len(sorted_vals)>0):
-                    max_val = sorted_vals[-1]
-
-                # Resample the majority group
-                concat_df_list = []
-                for case in self.y_df[name].unique():
-                    case_df = self.y_df.loc[self.y_df[name]==case]
-                    if ( int(balance_sample*max_val) < case_df.shape[0] ):
-                        case_df = case_df.sample(int(balance_sample*max_val))#,replace=True).drop_duplicates()
-                    concat_df_list.append(
-                        case_df
-                    )
-
-                concat_df = pd.concat(concat_df_list)
-                valid_indexes = concat_df.index
+                valid_indexes = get_index_resampled_categories_reduce_largest(self.y_df,name,balance_sample)
                 x_df = self.x_df.loc[valid_indexes]
                 y_df = self.y_df.loc[valid_indexes]
 

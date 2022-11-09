@@ -322,7 +322,7 @@ class MLTrainingHelper:
         self.clf_model = clf_model
 
         self.regressor_input_x_dict = {
-            'Linear': joined_df,
+            'Linear': scaled_df,
             'Forest': joined_df,
             'MLP'   : joined_df,
             'SVM'   : scaled_joined_df,
@@ -330,12 +330,27 @@ class MLTrainingHelper:
         }
 
         self.classifier_input_x_dict = {
-            'Logistic': scaled_joined_df,
+            'Logistic': scaled_df,
             'Forest'  : joined_df,
             'MLP'     : scaled_joined_df,
             'SVM'     : scaled_joined_df,
             'KNN'     : scaled_joined_df,
         }
+        #self.regressor_input_x_dict = {
+        #    'Linear': joined_df,
+        #    'Forest': joined_df,
+        #    'MLP'   : joined_df,
+        #    'SVM'   : scaled_joined_df,
+        #    'KNN'   : scaled_joined_df,
+        #}
+        #
+        #self.classifier_input_x_dict = {
+        #    'Logistic': scaled_joined_df,
+        #    'Forest'  : joined_df,
+        #    'MLP'     : scaled_joined_df,
+        #    'SVM'     : scaled_joined_df,
+        #    'KNN'     : scaled_joined_df,
+        #}
 
         self.regressor_model_dict = {
             'Linear': LinearRegression(),

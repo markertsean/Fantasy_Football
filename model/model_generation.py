@@ -479,7 +479,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     ).copy().sort_values(key_fields)
     pca_data = pca_comb.transform( team_pca_inp_df, opp_pca_inp_df )
     pca_data_cols = [str(i) for i in range(0,pca_data.shape[1])]
-    pca_df = pd.DataFrame(pca_data,columns = pca_data_cols)
+    pca_df = pd.concat([team_pca_inp_df[key_fields],pd.DataFrame(pca_data,columns = pca_data_cols)],axis=1)
 
 
     ml_helper = MLTrainingHelper(
@@ -569,11 +569,17 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
     team_rolling_df     = output_dfs['team_df']
     opposing_rolling_df = output_dfs['opposing_df']
 
+    team_rolling_df = utilities.filter_df_year(
+        team_rolling_df,
+        input_arguments['predict_start_year'],
+        input_arguments['predict_end_year']
+    ).dropna()
 
-    joined_df = team_rolling_df[key_fields+team_fields].merge(
-        opposing_rolling_df[key_fields+opposing_fields],
-        on=key_fields
-    )
+    opposing_rolling_df = utilities.filter_df_year(
+        opposing_rolling_df,
+        input_arguments['predict_start_year'],
+        input_arguments['predict_end_year']
+    ).dropna()
 
     scaled_joined_out_df = utilities.filter_df_year(
         scaled_joined_df,
@@ -581,16 +587,15 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
         input_arguments['predict_end_year']
     ).dropna()
 
-    joined_out_df = utilities.filter_df_year(
-        joined_df,
-        input_arguments['predict_start_year'],
-        input_arguments['predict_end_year']
-    )
-
     values_out_df = utilities.filter_df_year(
         values_df,
         input_arguments['predict_start_year'],
         input_arguments['predict_end_year']
+    )
+
+    joined_out_df = team_rolling_df[key_fields+team_fields].merge(
+        opposing_rolling_df[key_fields+opposing_fields],
+        on=key_fields
     )
 
     team_pca_inp_df = team_rolling_df[key_fields+team_fields].merge(
@@ -603,7 +608,7 @@ def predict(input_arguments,output_dfs,combined_models,key_fields=['season','wee
     ).sort_values(key_fields)
     pca_data = combined_models['reg_models'].transform( team_pca_inp_df, opp_pca_inp_df )
     pca_data_cols = [str(i) for i in range(0,pca_data.shape[1])]
-    pca_out_df = pd.DataFrame(pca_data,columns = pca_data_cols)
+    pca_out_df = pd.concat([team_pca_inp_df[key_fields],pd.DataFrame(pca_data,columns = pca_data_cols)],axis=1)
 
     output_df = values_out_df[key_fields+combined_models['propogate_cols']].copy()
 

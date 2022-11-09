@@ -41,81 +41,26 @@ __model_version__='0.1.0'
 
 def __read_args__():
 
-    parser = argparse.ArgumentParser(description='Read and save data from nfl_data_py requests using input years')
-
-    parser.add_argument('--normalization_version', type=str, nargs='?',
-        default=normalize_raw_input.__normalization_version__,
-        help='The version to use for normalization'
-    )
-    parser.add_argument('--norm_start_year', type=int, nargs='?', default=1999,
-        help='The starting year for input data (Earliest available data is from 1999)'
-    )
-    parser.add_argument('--norm_end_year', type=int, nargs='?',default=datetime.date.today().year,
-        help='The ending year for input data (Latest is current year)'
-    )
-
-    parser.add_argument('--process_start_year', type=int, nargs='?', default=1999,
-        help='The starting year for input data (Earliest available data is from 1999)'
-    )
-    parser.add_argument('--process_end_year', type=int, nargs='?',default=datetime.date.today().year,
-        help='The ending year for input data (Latest is current year)'
-    )
-
-    parser.add_argument('--predict_start_year', type=int, nargs='?', default=1999,
-        help='The starting year for input data (Earliest available data is from 1999)'
-    )
-    parser.add_argument('--predict_end_year', type=int, nargs='?',default=datetime.date.today().year,
-        help='The ending year for input data (Latest is current year)'
-    )
-
-    parser.add_argument('--n_rolling', type=int, nargs='?',default=3,
-        help='The number of months for lookback'
-    )
-    parser.add_argument('--n_components_team', type=int, nargs='?',default=24,
-        help='The number of PCA components for the team data'
-    )
-    parser.add_argument('--n_components_opp', type=int, nargs='?',default=15,
-        help='The number of PCA components for the opposing team data'
-    )
-
-    parser.add_argument('--reg_model_type', type=str, nargs='?',
-        default='Linear',
-        help='The ML model to use for regression [Linear,SVM,Forest,MLP]'
-    )
-    parser.add_argument('--clf_model_type', type=str, nargs='?',
-        default='Logistic',
-        help='The ML model to use for classification [Logistic,SVM,Forest,MLP]'
-    )
-
-    parser.add_argument('--model_version', type=str, nargs='?',
-        default=__model_version__,
-        help='The version to use for models'
-    )
-
-    parser.add_argument('--input_models_file_name', type=str, nargs='?',
-        help='Optional ML file to load/use'
-    )
-
-    parser.add_argument('--output_models_file_name', type=str, nargs='?',
-        help='Optional ML file to save, othwerwise uses date'
-    )
-
-    parser.add_argument('--predict_values', action='store_true',
-        help='Whether to forecast values for predict years or not'
-    )
-
-    parser.add_argument('--prediction_file_name', type=str, nargs='?',
-        help='Optional save data with prediction'
-    )
-
-    args = parser.parse_args()
-    inp_args = vars(args)
-
-    inp_args['generate_model'] = inp_args['input_models_file_name'] is None
-
-    argument_validation.run_argument_validation(inp_args)
-
-    return inp_args
+    return argument_validation.build_args([
+        'normalization_version',
+        'norm_start_year',
+        'norm_end_year',
+        'generate_model',
+        'model_version',
+        'input_models_file_name',
+        'output_models_file_name',
+        'process_start_year',
+        'process_end_year',
+        'reg_model_type',
+        'clf_model_type',
+        'n_rolling',
+        'n_components_team',
+        'n_components_opp',
+        'predict_values',
+        'prediction_file_name',
+        'predict_start_year',
+        'predict_end_year',
+    ])
 
 def generate_df_rolling_means(
     input_df,

@@ -18,31 +18,12 @@ __normalization_version__ = "0.1.0"
 # Only start and end year, can read from default max range
 def __read_args__():
 
-    parser = argparse.ArgumentParser(description='Read and save data from nfl_data_py requests using input years')
-
-    parser.add_argument('--norm_start_year', type=int, nargs='?', default=1999,
-        help='The starting year for input data (Earliest available data is from 1999)'
-    )
-    parser.add_argument('--norm_end_year', type=int, nargs='?',default=datetime.date.today().year,
-        help='The ending year for input data (Latest is current year)'
-    )
-    parser.add_argument('--input_version', type=str, nargs='?',
-        default=run_raw_nfl_import.__import_version__,
-        help='The version to use for import'
-    )
-    parser.add_argument('--normalization_version', type=str, nargs='?',
-        default=__normalization_version__,
-        help='The version to use for normalization'
-    )
-
-    args = parser.parse_args()
-    inp_args = vars(args)
-
-    inp_args['normalize'] = True
-
-    argument_validation.run_argument_validation(inp_args)
-
-    return inp_args
+    return argument_validation.build_args([
+        'input_version',
+        'normalization_version',
+        'norm_start_year',
+        'norm_end_year',
+    ])
 
 def __write_normalized_team_data__(input_df,write_dir):
     os.makedirs(write_dir,exist_ok=True)

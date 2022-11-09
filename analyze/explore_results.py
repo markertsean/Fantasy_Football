@@ -507,31 +507,13 @@ def gen_top_team_list(inp_df,inp_cols,n_teams,key_fields=['season','week','team'
 
 # Only start and end year, can read from default max range
 def __read_args__():
-
-    parser = argparse.ArgumentParser(description='Read and save data from nfl_data_py requests using input years')
-
-    parser.add_argument('--prediction_file_name', type=str, required=True,
-        help='Prediction file name to load/use'
-    )
-
-    parser.add_argument('--top_stats_list', nargs='+', required=True,
-        help='Prediction file name to load/use'
-    )
-
-    parser.add_argument('--model_version', type=str, nargs='?',
-        default=model_generation.__model_version__,
-        help='The version to use for models'
-    )
-
-
-    args = parser.parse_args()
-
-    input_arguments = vars(args)
-
-    argument_validation.run_argument_validation(input_arguments)
-
-    return input_arguments
-
+    return argument_validation.build_args([
+        'model_version',
+        'predict_values',
+        'prediction_file_name',
+        'analyze_version',
+        'top_stats_list',
+    ])
 
 def analyze(input_arguments):
 

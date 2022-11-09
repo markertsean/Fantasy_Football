@@ -41,13 +41,6 @@ def run_argument_validation(input_arguments):
         run_input_gt_0_check(input_arguments,'n_components_team')
         run_input_gt_0_check(input_arguments,'n_components_opp')
 
-        if (input_arguments['input_scaler_file_name'] is not None):
-            fn = model_generation.get_model_path(
-                input_arguments['model_version']
-            )+input_arguments['input_scaler_file_name']
-            if ( not os.path.exists(fn) ):
-                raise IOError("File does not exist: "+fn)
-
         valid_reg_models = ['Linear','SVM','Forest','MLP','KNN']
         assert (input_arguments['reg_model_type'] in valid_reg_models), "reg_model_type must be one of "+' '.join(valid_reg_models)
 

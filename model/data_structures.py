@@ -125,6 +125,7 @@ class ModelWrapper:
         self,
         input_x_df,
         input_y_df,
+        scaler,
         key_fields=['season','week','team','opponent']
     ):
         self.x_df = input_x_df.dropna()
@@ -134,6 +135,10 @@ class ModelWrapper:
 
         assert self.x_df.shape[0]==self.y_df.shape[0] # X and Y must have same dimension
         self.key_fields = key_fields
+
+        assert isinstance(scaler,ZScaler), "input scalar must be of class ZScaler"
+        self.scaler = scaler
+
         self.model_dict = {}
         self.col_dict = {}
         self.cv_dict = {}
@@ -156,6 +161,12 @@ class ModelWrapper:
     def model(self,name):
         assert name in self.model_dict
         return self.model_dict[name]
+
+    def get_scaler(self):
+        return self.scaler
+
+    def scale_cols(self,inp_df,cols):
+        return self.scaler.scale_cols(inp_df,cols)
 
     def train_model(
         self,

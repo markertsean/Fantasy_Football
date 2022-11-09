@@ -78,10 +78,6 @@ def __read_args__():
         help='The number of PCA components for the opposing team data'
     )
 
-    parser.add_argument('--input_scaler_file_name', type=str, nargs='?',
-        help='Optional scaler file to load/use'
-    )
-
     parser.add_argument('--reg_model_type', type=str, nargs='?',
         default='Linear',
         help='The ML model to use for regression [Linear,SVM,Forest,MLP]'
@@ -89,10 +85,6 @@ def __read_args__():
     parser.add_argument('--clf_model_type', type=str, nargs='?',
         default='Logistic',
         help='The ML model to use for classification [Logistic,SVM,Forest,MLP]'
-    )
-
-    parser.add_argument('--output_scaler_file_name', type=str, nargs='?',
-        help='Optional scaler file to save, otherwise uses date'
     )
 
     parser.add_argument('--model_version', type=str, nargs='?',
@@ -380,6 +372,7 @@ def generate_models_from_list(
         fields_to_model,
         feature_df =None,
         value_df = None,
+        scaler = None,
         reuse_model_wrapper = None,
         model = None,
         cv_parameters = None,
@@ -440,7 +433,7 @@ def generate_models_from_list(
 
     my_models = 0
     if (reuse_model_wrapper is None):
-        my_models = ModelWrapper( feature_df, value_df )
+        my_models = ModelWrapper( feature_df, value_df, scaler )
     else:
         my_models = reuse_model_wrapper
 
@@ -487,27 +480,7 @@ def get_features_values_dict(input_arguments):
 def create_model(input_arguments,output_dfs,key_fields=['season','week','team','opponent']):
 
     # Zscale fields
-    if (input_arguments['input_scaler_file_name'] is None):
-        scaler = gen_scale_model(output_dfs)
-
-        if (input_arguments['output_scaler_file_name'] is not None):
-            output_name = get_model_path() + input_arguments['output_scaler_file_name']
-        else:
-            output_name = get_model_path() + \
-                "scaler_"+\
-                str(input_arguments["process_start_year"])+\
-                "_"+\
-                str(input_arguments["process_end_year"])+\
-                ".pkl"
-        os.makedirs(get_model_path(),exist_ok=True)
-        with open(output_name,'wb') as f:
-            pkl.dump(scaler,f)
-        print("Wrote "+output_name)
-    else:
-        input_name = get_model_path()+input_arguments['input_scaler_file_name']
-        print("Using file "+input_name)
-        with open(input_name, 'rb') as f:
-            scaler = pkl.load(f)
+    scaler = gen_scale_model(output_dfs)
 
     #TODO:Consider inplementing Reduce fields
     #TODO:conditional load
@@ -541,7 +514,6 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     ]
 
     continuous_values_cols = [
-        #'rushing_yards', 'receiving_yards',
         'rushing_yards', 'receiving_yards', 'complete_pass',
     ]
 
@@ -743,6 +715,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         fields_to_model = continuous_values_cols,
         feature_df      = this_reg_x,
         value_df        = this_reg_y,
+        scaler          = scaler,
         model           = this_reg_model,
         cv_parameters   = this_reg_param,
         test_size       = 0.20,
@@ -754,6 +727,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         fields_to_model = class_values_list,
         feature_df      = this_clf_x,
         value_df        = this_clf_y,
+        scaler          = scaler,
         model           = this_clf_model,
         cv_parameters   = this_clf_param,
         test_size       = 0.20,
@@ -767,7 +741,6 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
     combined_models = {
         'reg_models': reg_models,
         'class_models': class_models,
-        'scaler': scaler,
         'propogate_cols': propogate_cols,
         'continuous_cols': continuous_values_cols,
         'propogate_cols': propogate_cols,
@@ -792,7 +765,11 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
 
 def predict(input_arguments,output_dfs,combined_models,key_fields=['season','week','team','opponent']):
 
-    scaled_joined_df = scale_combine_team_opposition( output_dfs, combined_models['scaler'], key_fields )
+    scaled_joined_df = scale_combine_team_opposition(
+        output_dfs,
+        combined_models['reg_models'].get_scaler(),
+        key_fields
+    )
 
     team_fields         = output_dfs['team_fields']
     opposing_fields     = output_dfs['opposing_fields']

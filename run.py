@@ -85,14 +85,6 @@ def read_args():
     )
 
     
-    parser.add_argument('--input_scaler_file_name', type=str, nargs='?',
-        help='Optional scaler file to load/use'
-    )
-    parser.add_argument('--output_scaler_file_name', type=str, nargs='?',
-        help='Optional scaler file to save, otherwise uses date'
-    )
-
-    
     parser.add_argument('--predict_values', action='store_true',
         help='Whether to forecast values for predict years or not'
     )

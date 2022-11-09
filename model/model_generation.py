@@ -623,12 +623,24 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
                 (n_23,),
                 (n_2 ,),
                 (n_3 ,),
+
                 (n_  , n_23,),
-                (n_23, n_2 ,),
-                (n_2 , n_3 ,),
+                (n_  , n_2 ,),
                 (n_23, n_  ,),
+                (n_23, n_2 ,),
                 (n_2 , n_23,),
+                (n_2 , n_3 ,),
                 (n_3 , n_2 ,),
+
+                (n_  , n_23, n_  ,),
+                (n_  , n_23, n_23,),
+                (n_  , n_23, n_2 ,),
+                (n_  , n_23, n_3 ,),
+
+                (n_23, n_  , n_  ,),
+                (n_23, n_23, n_23,),
+                (n_23, n_2 , n_2 ,),
+                (n_23, n_3 , n_3 ,),
             ],
         },
         'SVM':{
@@ -655,12 +667,24 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
                 (n_23,),
                 (n_2 ,),
                 (n_3 ,),
+
                 (n_  , n_23,),
-                (n_23, n_2 ,),
-                (n_2 , n_3 ,),
+                (n_  , n_2 ,),
                 (n_23, n_  ,),
+                (n_23, n_2 ,),
                 (n_2 , n_23,),
+                (n_2 , n_3 ,),
                 (n_3 , n_2 ,),
+
+                (n_  , n_23, n_  ,),
+                (n_  , n_23, n_23,),
+                (n_  , n_23, n_2 ,),
+                (n_  , n_23, n_3 ,),
+
+                (n_23, n_  , n_  ,),
+                (n_23, n_23, n_23,),
+                (n_23, n_2 , n_2 ,),
+                (n_23, n_3 , n_3 ,),
             ],
         },
         'SVM':{
@@ -703,6 +727,7 @@ def create_model(input_arguments,output_dfs,key_fields=['season','week','team','
         scoring='precision_micro',
         cv=3,
         multiclass=True,
+        balance_sample=1.2
     )
 
     combined_models = {

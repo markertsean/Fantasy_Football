@@ -162,15 +162,27 @@ class ModelWrapper:
             if (balance_sample is not None):
                 assert isinstance(balance_sample,float), "balance_sample must be float"
 
-                y_case_df     = self.y_df.loc[self.y_df[name]==1]
-                y_non_case_df = self.y_df.loc[self.y_df[name]==0]
+                # Determine second largest shape, limit anything above that
+                max_val = self.y_df.shape[0]
+                max_vals = []
+                for case in self.y_df[name].unique():
+                    max_vals.append(self.y_df.loc[self.y_df[name]==case].shape[0])
+                sorted_vals = sorted(max_vals)
+                sorted_vals = sorted_vals[:-1]
+                if (len(sorted_vals)>0):
+                    max_val = sorted_vals[-1]
 
-                if ( y_case_df.shape[0] < y_non_case_df.shape[0] ):
-                    y_non_case_df = y_non_case_df.sample(int(balance_sample*y_case_df.shape[0]))
-                elif ( y_case_df.shape[0] > y_non_case_df.shape[0] ):
-                    y_case_df = y_case_df.sample(int(balance_sample*y_non_case_df.shape[0]))
+                # Resample the majority group
+                concat_df_list = []
+                for case in self.y_df[name].unique():
+                    case_df = self.y_df.loc[self.y_df[name]==case]
+                    if ( int(balance_sample*max_val) < case_df.shape[0] ):
+                        case_df = case_df.sample(int(balance_sample*max_val))#,replace=True).drop_duplicates()
+                    concat_df_list.append(
+                        case_df
+                    )
 
-                concat_df = pd.concat([y_case_df,y_non_case_df])
+                concat_df = pd.concat(concat_df_list)
                 valid_indexes = concat_df.index
                 x_df = self.x_df.loc[valid_indexes]
                 y_df = self.y_df.loc[valid_indexes]
@@ -184,7 +196,7 @@ class ModelWrapper:
             this_model = model
             if multiclass:
                 this_model = MultiOutputClassifier(this_model)
-            
+
             if (parameters is None):
                 self.model_dict[name] = model.fit(x_train,y_train)
             else:

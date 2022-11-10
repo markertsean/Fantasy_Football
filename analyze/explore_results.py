@@ -415,17 +415,18 @@ def generation_prediction_points(inp_df,continuous_cols,categorical_cols):
     ).astype(int)
 
 
+    # Close field goal misses are rare
     prediction_df['close_field_goal_success'] = (
-        prediction_df['close_field_goal_attempts'].apply(lambda x: get_val_from_range(x)) * prediction_df['close_field_goal_success_rate']
+        prediction_df['close_field_goal_attempts'].apply(lambda x: get_val_from_range(x))# * prediction_df['close_field_goal_success_rate']
     ).astype(int)
     prediction_df['close_field_goal_success_points'] = (
         prediction_df['close_field_goal_success'] * all_points_dict['close_field_goal_success']
     ).astype(int)
     prediction_df['close_field_goal_failure'] = (
-        prediction_df['close_field_goal_attempts'].apply(lambda x: get_val_from_range(x)) * (1.-prediction_df['close_field_goal_success_rate'])
+        prediction_df['close_field_goal_attempts'].apply(lambda x: get_val_from_range(x))# * (1.-prediction_df['close_field_goal_success_rate'])
     ).astype(int)
     prediction_df['close_field_goal_failure_points'] = (
-        prediction_df['close_field_goal_failure'] * all_points_dict['close_field_goal_failure']
+        prediction_df['close_field_goal_failure']# * all_points_dict['close_field_goal_failure']
     ).astype(int)
 
     prediction_df['far_field_goal_success'] = (
@@ -467,8 +468,10 @@ def load_true_values_points(year_list,key_fields = ['season','week','team','oppo
     true_df['far_field_goal_failure'] = (
         true_df['kick_distance_40_49_fail'] + true_df['kick_distance_50_fail']
     )
+    true_df['far_field_goal_attempts'] = true_df['far_field_goal_failure'] + true_df['far_field_goal_success']
     true_df['close_field_goal_success'] = true_df['kick_distance_0_39_success']
     true_df['close_field_goal_failure'] = true_df['kick_distance_0_39_fail']
+    true_df['close_field_goal_attempts'] = true_df['close_field_goal_failure'] + true_df['close_field_goal_success']
     true_df['defensive_points_allowed'] = true_df['opponent_points']
     true_df['offensive_interception'] = true_df['interception']
 
@@ -557,7 +560,7 @@ def analyze(input_arguments):
     key_fields = ['season','week','team','opponent']
 
     points_cols = []
-    values_cols = []
+    values_cols = ['close_field_goal_attempts','far_field_goal_attempts']
     rename_cols = {}
     for col in prediction_df.columns.values:
         if ( col.endswith('_points')  ):

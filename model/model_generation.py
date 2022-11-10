@@ -18,7 +18,7 @@ from util import argument_validation
 from model.data_structures import ZScaler,PCACols,ModelWrapper,get_index_resampled_categories_reduce_largest,MLTrainingHelper,PCATeamOpp
 
 
-__model_version__='0.1.0'
+__model_version__='0.2.0'
 
 def __read_args__():
 

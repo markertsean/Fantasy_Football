@@ -252,8 +252,16 @@ def plot_confusion(cols,inp_pred_df,inp_true_df,input_args):
         )
 
         conf = {}
+        macro_tp = {}
+        macro_tn = {}
+        macro_fp = {}
+        macro_fn = {}
         for t in all_bins:
-            conf[t] = {}
+            conf[t]     = {}
+            macro_tp[t] = 0.0
+            macro_tn[t] = 0.0
+            macro_fp[t] = 0.0
+            macro_fn[t] = 0.0
             for p in all_bins:
                 conf[t][p] = comb_df.loc[
                     (comb_df[col+"_true"]==t) &
@@ -266,20 +274,36 @@ def plot_confusion(cols,inp_pred_df,inp_true_df,input_args):
         fp = 0.0
         fn = 0.0
         for i_t in range(0,len(all_bins)):
+            t = all_bins[i_t]
             for i_p in range(0,len(all_bins)):
-                inp_array[i_t,i_p] = conf[all_bins[i_t]][all_bins[i_p]]
+                p = all_bins[i_p]
+                inp_array[i_t,i_p] = conf[t][p]
 
                 if (i_t == i_p):
-                    tp += inp_array[i_t,i_p]
+                    tp          += inp_array[i_t,i_p]
+                    macro_tp[t] += inp_array[i_t,i_p]
                 else:
                     tn += inp_array[i_t,i_p]
 
+        macro_precision_sum = 0.0
+        macro_recall_sum = 0.0
+        full_array_sum = inp_array.sum()
         for i in range(0,len(all_bins)):
-            fn += inp_array[i,:].sum() - inp_array[i,i]
-            fp += inp_array[:,i].sum() - inp_array[i,i]
+            t = all_bins[i]
+            macro_fn[t] = inp_array[i,:].sum() - inp_array[i,i]
+            macro_fp[t] = inp_array[:,i].sum() - inp_array[i,i]
+            macro_tn[t] = full_array_sum - macro_tp[t] - macro_fn[t] - macro_fp[t]
+
+            macro_precision_sum += macro_tp[t] / (macro_tp[t] + macro_fp[t] + 1e-7)
+            macro_recall_sum    += macro_tp[t] / (macro_tp[t] + macro_fn[t] + 1e-7)
+
+            fn += macro_fn[t]
+            fp += macro_fp[t]
 
         micro_precision = tp / (tp+fp+1e-7)
-        micro_recall = tp / (tp+fn+1e-7)
+        micro_recall    = tp / (tp+fn+1e-7)
+        macro_precision = macro_precision_sum / len(all_bins)
+        macro_recall    = macro_recall_sum    / len(all_bins)
 
         all_bins = [ str(s) for s in all_bins ]
 
@@ -293,9 +317,11 @@ def plot_confusion(cols,inp_pred_df,inp_true_df,input_args):
         sns.heatmap(df_cm, annot=True,fmt='g')
         plt.xlabel("Prediction")
         plt.ylabel("Actual")
-        plt.title("{:s}:    Micro Precision={:8.4f}".format(
+        plt.title("{:s}:    Micro Precision={:8.4f}    Macro Precision={:8.4f}    Macro Recall={:8.4f}".format(
             col,
             micro_precision,
+            macro_precision,
+            macro_recall,
         ))
         plt.savefig(plot_full_fn)
         print("Wrote "+plot_full_fn)

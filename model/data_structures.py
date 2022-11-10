@@ -309,7 +309,7 @@ class MLTrainingHelper:
     def __init__(
         self,
         joined_df,
-        scaled_joined_df,
+        scaled_df,
         pca_df,
         reg_model,
         clf_model,
@@ -323,34 +323,19 @@ class MLTrainingHelper:
 
         self.regressor_input_x_dict = {
             'Linear': scaled_df,
-            'Forest': joined_df,
-            'MLP'   : joined_df,
-            'SVM'   : scaled_joined_df,
-            'KNN'   : scaled_joined_df,
+            'Forest': scaled_df,
+            'MLP'   : scaled_df,
+            'SVM'   : scaled_df,
+            'KNN'   : scaled_df,
         }
 
         self.classifier_input_x_dict = {
             'Logistic': scaled_df,
-            'Forest'  : joined_df,
-            'MLP'     : scaled_joined_df,
-            'SVM'     : scaled_joined_df,
-            'KNN'     : scaled_joined_df,
+            'Forest'  : scaled_df,
+            'MLP'     : scaled_df,
+            'SVM'     : scaled_df,
+            'KNN'     : scaled_df,
         }
-        #self.regressor_input_x_dict = {
-        #    'Linear': joined_df,
-        #    'Forest': joined_df,
-        #    'MLP'   : joined_df,
-        #    'SVM'   : scaled_joined_df,
-        #    'KNN'   : scaled_joined_df,
-        #}
-        #
-        #self.classifier_input_x_dict = {
-        #    'Logistic': scaled_joined_df,
-        #    'Forest'  : joined_df,
-        #    'MLP'     : scaled_joined_df,
-        #    'SVM'     : scaled_joined_df,
-        #    'KNN'     : scaled_joined_df,
-        #}
 
         self.regressor_model_dict = {
             'Linear': LinearRegression(),

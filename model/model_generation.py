@@ -56,7 +56,7 @@ def generate_df_rolling_means(
         output_df[new_col] = 0.0
         for team in input_df[key_field].unique():
             roll_ind = output_df[key_field]==team
-            output_df.loc[roll_ind,new_col] = input_df.loc[roll_ind,col].rolling(n_lookback).mean()
+            output_df.loc[roll_ind,new_col] = input_df.loc[roll_ind,col].rolling(n_lookback).mean().shift(1)
     return output_df
 
 def gen_field_ranges( inp_df, col, range_starts ):

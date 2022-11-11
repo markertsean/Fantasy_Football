@@ -373,10 +373,10 @@ class MLTrainingHelper:
                 'fit_intercept':[True,False],
             },
             'Forest':{
-                'n_estimators':[100,300,500],
+                'n_estimators':[100,300],
                 'max_depth':[None,10,15],
-                #'max_features':[None,'sqrt'],
-                #'min_samples_leaf':[1,0.1,0.05,0.01],
+                'max_features':[None,'sqrt'],
+                'min_samples_leaf':[1,0.1,0.05,0.01],
             },
             'MLP':{
                 'hidden_layer_sizes': [
@@ -384,7 +384,6 @@ class MLTrainingHelper:
                     (n_23,),
                     (n_2 ,),
                     (n_3 ,),
-
                     (n_  , n_23,),
                     (n_  , n_2 ,),
                     (n_23, n_  ,),
@@ -392,25 +391,32 @@ class MLTrainingHelper:
                     (n_2 , n_23,),
                     (n_2 , n_3 ,),
                     (n_3 , n_2 ,),
-
                     (n_  , n_23, n_  ,),
                     (n_  , n_23, n_23,),
                     (n_  , n_23, n_2 ,),
                     (n_  , n_23, n_3 ,),
-
                     (n_23, n_  , n_  ,),
                     (n_23, n_23, n_23,),
                     (n_23, n_2 , n_2 ,),
                     (n_23, n_3 , n_3 ,),
+                    (n_23, n_23, n_23,n_23,),
+                    (n_23, n_23, n_23,n_2 ,),
+                    (n_23, n_23, n_23,n_3 ,),
+                    (n_23, n_2 , n_2 ,n_23,),
+                    (n_23, n_2 , n_2 ,n_2 ,),
+                    (n_23, n_2 , n_2 ,n_3 ,),
+                    (n_23, n_3 , n_3 ,n_23,),
+                    (n_23, n_3 , n_3 ,n_2 ,),
+                    (n_23, n_3 , n_3 ,n_3 ,),
                 ],
             },
             'SVM':{
-                'C':10.**(np.arange(-2, 1, 1.0)),
+                'C':10.**(np.arange(-3, 2, 0.5)),
                 'kernel':['poly','rbf','sigmoid'],
                 'gamma':['scale','auto'],
             },
             'KNN':{
-                'n_neighbors': [10,15,20,25],
+                'n_neighbors': [ i+5 for i in range(0,25,5) ],
                 'weights': ['uniform','distance'],
             },
         }
@@ -429,8 +435,8 @@ class MLTrainingHelper:
             'Forest':{
                 'n_estimators':[3,10,30,100],
                 'max_depth':[None,10,15],
-                #'max_features':[None,'sqrt'],
-                #'min_samples_leaf':[1,0.1,0.05,0.01],
+                'max_features':[None,'sqrt'],
+                'min_samples_leaf':[1,0.1,0.05,0.01],
             },
             'MLP':{
                 'hidden_layer_sizes': [
@@ -438,7 +444,6 @@ class MLTrainingHelper:
                     (n_23,),
                     (n_2 ,),
                     (n_3 ,),
-
                     (n_  , n_23,),
                     (n_  , n_2 ,),
                     (n_23, n_  ,),
@@ -446,25 +451,32 @@ class MLTrainingHelper:
                     (n_2 , n_23,),
                     (n_2 , n_3 ,),
                     (n_3 , n_2 ,),
-
                     (n_  , n_23, n_  ,),
                     (n_  , n_23, n_23,),
                     (n_  , n_23, n_2 ,),
                     (n_  , n_23, n_3 ,),
-
                     (n_23, n_  , n_  ,),
                     (n_23, n_23, n_23,),
                     (n_23, n_2 , n_2 ,),
                     (n_23, n_3 , n_3 ,),
+                    (n_23, n_23, n_23,n_23,),
+                    (n_23, n_23, n_23,n_2 ,),
+                    (n_23, n_23, n_23,n_3 ,),
+                    (n_23, n_2 , n_2 ,n_23,),
+                    (n_23, n_2 , n_2 ,n_2 ,),
+                    (n_23, n_2 , n_2 ,n_3 ,),
+                    (n_23, n_3 , n_3 ,n_23,),
+                    (n_23, n_3 , n_3 ,n_2 ,),
+                    (n_23, n_3 , n_3 ,n_3 ,),
                 ],
             },
             'SVM':{
-                'C':10.**(np.arange(-2, 1, 1.0)),
+                'C':10.**(np.arange(-3, 2, 0.5)),
                 'kernel':['poly','rbf','sigmoid'],
                 'gamma':['scale','auto'],
             },
             'KNN':{
-                'n_neighbors': [10,15,20,25],
+                'n_neighbors': [ i+5 for i in range(0,25,5) ],
                 'weights': ['uniform','distance'],
             },
         }

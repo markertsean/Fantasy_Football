@@ -47,10 +47,7 @@ def __read_args__():
 Get arguments
 Run ingest, normalize, generate model, <predict results>, explore results
 '''
-def main():
-
-    input_args = __read_args__()
-
+def main(input_args):
     print("Input arguments-")
     for arg in input_args:
         print("\t{:30s}: {:30s}".format(arg,str(input_args[arg])))
@@ -77,4 +74,5 @@ def main():
         print("Finished analyze job")
 
 if __name__ == "__main__":
-    main()
+    input_args = __read_args__()
+    main(input_args)
